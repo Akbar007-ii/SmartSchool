@@ -45,6 +45,11 @@ def first_login_change(data: FirstLoginChange,current_user: Users = Depends(get_
         raise HTTPException(status_code=400,detail="Учурдагы сыр сөз туура эмес")
     if verify_password(data.new_password,current_user.hashed_password):
         raise HTTPException(status_code=400,detail="Жаңы сыр сөз эски сыр сөздөн айырмаланышы керек")
+    if len(data.new_password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Жаңы сыр сөз кеминде 8 белгиден турушу керек"
+        )
     current_user.hashed_password = hash_password(data.new_password)
     current_user.is_temp_password = False
     db.commit()

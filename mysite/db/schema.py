@@ -1,7 +1,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional,List
 
 from pydantic import (BaseModel,ConfigDict,Field,field_validator,)
 
@@ -27,14 +27,17 @@ class SchoolCreate(BaseModel):
 
 
 class SchoolUpdate(BaseModel):
-    name: Optional[str] = Field(default=None, max_length=200)
+    name: Optional[str] = Field(
+        default=None,
+        min_length=2,
+        max_length=200
+    )
     address: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
     logo_url: Optional[str] = None
     banner_url: Optional[str] = None
     director_name: Optional[str] = None
-    is_active: Optional[bool] = None
 
 
 class SchoolOut(BaseSchema):
@@ -107,12 +110,13 @@ class TokenResponse(BaseModel):
     requires_password_change: bool = False
 
 
+
 class ClassCreate(BaseModel):
     grade_number: int = Field(ge=1, le=11)
     letter: str = Field(min_length=1, max_length=5)
-    school_id: int
     class_teacher_id: Optional[int] = None
     academic_year: str
+
 
 
 class ClassOut(BaseSchema):
@@ -124,10 +128,11 @@ class ClassOut(BaseSchema):
     academic_year: str
 
 
+
 class SubjectCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     code: Optional[str] = None
-    school_id: int
+
 
 
 class SubjectOut(BaseSchema):
@@ -153,3 +158,101 @@ class TeacherAssignmentOut(BaseSchema):
     school_id: int
     academic_year: str
     created_at: datetime
+
+
+class TeacherCreate(BaseModel):
+    inn: str
+    full_name: str = Field(min_length=3, max_length=200)
+    phone: Optional[str] = None
+
+    @field_validator("inn")
+    @classmethod
+    def validate_inn(cls, value):
+        if not value.isdigit() or len(value) != 14:
+            raise ValueError("ИНН 14 цифра болушу керек")
+        return value
+
+
+class TeacherCreatedOut(BaseModel):
+    id: int
+    inn: str
+    full_name: str
+    temporary_password: str
+    role: str
+    school_id: int
+
+class StudentCreate(BaseModel):
+    inn: str = Field(min_length=14, max_length=14)
+    full_name: str = Field(min_length=3, max_length=200)
+    phone: Optional[str] = None
+    class_id: int
+
+    @field_validator("inn")
+    @classmethod
+    def validate_inn(cls, value):
+        if not value.isdigit() or len(value) != 14:
+            raise ValueError("ИНН 14 цифра болушу керек")
+        return value
+
+class StudentPromotionRequest(BaseModel):
+    source_academic_year: str = Field(
+        min_length=9,
+        max_length=20
+    )
+
+    target_academic_year: str = Field(
+        min_length=9,
+        max_length=20
+    )
+
+    excluded_student_ids: List[int] = Field(default_factory=list)
+
+class StudentUpdate(BaseModel):
+    full_name: Optional[str] = Field(
+        default=None,
+        min_length=3,
+        max_length=200
+    )
+
+    phone: Optional[str] = Field(
+        default=None,
+        max_length=20
+    )
+
+
+
+class ParentRegister(BaseModel):
+    inn: str = Field(min_length=14, max_length=14)
+    full_name: str = Field(min_length=3, max_length=200)
+    phone: Optional[str] = Field(default=None, max_length=20)
+    password: str = Field(min_length=8)
+
+    student_inn: str = Field(min_length=14, max_length=14)
+    student_password: str = Field(min_length=1)
+
+    @field_validator("inn")
+    @classmethod
+    def validate_inn(cls, value):
+        if not value.isdigit():
+            raise ValueError("ИНН 14 цифра болушу керек")
+        return value
+
+
+class ParentLinkStudent(BaseModel):
+    student_inn: str = Field(min_length=14, max_length=14)
+    student_temporary_password: str = Field(min_length=1)
+    relationship_type: Optional[str] = None
+
+    @field_validator("student_inn")
+    @classmethod
+    def validate_student_inn(cls, value):
+        if not value.isdigit():
+            raise ValueError("ИНН 14 цифра болушу керек")
+        return value
+
+class ParentAddChild(BaseModel):
+    student_inn: str = Field(min_length=14, max_length=14)
+    student_password: str = Field(min_length=1)
+
+class ClassTeacherAssign(BaseModel):
+    teacher_id: Optional[int] = None

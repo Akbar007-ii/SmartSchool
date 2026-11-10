@@ -48,10 +48,10 @@ def verify_access_token(token: str):
             algorithms=[ALGORITHM]
         )
 
-        return payload
+        if not payload.get("sub"):
+            return None
 
-    except jwt.ExpiredSignatureError:
-        return None
+        return payload
 
     except jwt.InvalidTokenError:
         return None

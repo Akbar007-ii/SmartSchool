@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi import Depends
 from mysite.db.models import Users
 
-from mysite.api.auth import router as auth_router
-from mysite.api.users import router as user_router
+from mysite.api import (auth,schools,users,classes,subjects,teacher_assignments,teacher_import,
+                        student_import,students,student_promotion,parents)
 from mysite.security.permissions import (
     get_current_user,
     director_required,
@@ -14,8 +14,17 @@ from mysite.security.permissions import (
 )
 
 app = FastAPI(title="Smart School API",description="Smart School Backend System",version="1.0.0")
-app.include_router(auth_router)
-app.include_router(user_router)
+app.include_router(auth.router)
+app.include_router(users.router)
+app.include_router(schools.router)
+app.include_router(classes.router)
+app.include_router(subjects.router)
+app.include_router(teacher_assignments.router)
+app.include_router(teacher_import.router)
+app.include_router(student_promotion.router)
+app.include_router(student_import.router)
+app.include_router(students.router)
+app.include_router(parents.router)
 
 @app.get("/test/me")
 def test_me(
