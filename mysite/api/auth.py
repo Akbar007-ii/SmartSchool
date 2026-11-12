@@ -52,6 +52,7 @@ def first_login_change(data: FirstLoginChange,current_user: Users = Depends(get_
         )
     current_user.hashed_password = hash_password(data.new_password)
     current_user.is_temp_password = False
+    current_user.temp_password_encrypted = None
     db.commit()
     db.refresh(current_user)
     access_token = create_access_token({

@@ -17,6 +17,7 @@ from mysite.security.permissions import (
     require_roles
 )
 from mysite.security.hashing import hash_password
+from mysite.services.passwords import encrypt_temp_password, set_temp_password
 
 router = APIRouter(
     prefix="/students",
@@ -231,6 +232,7 @@ def create_student(
             phone=data.phone,
             role="STUDENT",
             hashed_password=hash_password(password),
+            temp_password_encrypted=encrypt_temp_password(password),
             is_temp_password=True,
             school_id=current_user.school_id,
             is_active=True
