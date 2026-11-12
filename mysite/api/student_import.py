@@ -21,6 +21,7 @@ from mysite.db.models import (
 )
 from mysite.security.permissions import require_roles
 from mysite.security.hashing import hash_password
+from mysite.services.passwords import encrypt_temp_password, set_temp_password
 
 
 router = APIRouter(
@@ -163,6 +164,7 @@ def import_students_excel(
                 full_name=str(full_name).strip(),
                 role="STUDENT",
                 hashed_password=hash_password(password),
+                temp_password_encrypted=encrypt_temp_password(password),
                 is_temp_password=True,
                 phone=str(phone).strip() if phone else None,
                 school_id=current_user.school_id,

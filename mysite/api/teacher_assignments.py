@@ -45,7 +45,7 @@ def create_assignment(
     teacher = db.query(Users).filter(
         Users.id == data.teacher_id,
         Users.school_id == current_user.school_id,
-        Users.role == "TEACHER",
+        Users.role.in_(["TEACHER", "CLASS_TEACHER"]),
         Users.is_active == True
     ).first()
 
@@ -131,7 +131,7 @@ def get_teacher_assignments(
     current_user: Users = Depends(get_current_user)
 ):
 
-    if current_user.role == "TEACHER":
+    if current_user.role in ["TEACHER", "CLASS_TEACHER"]:
         if current_user.id != teacher_id:
             raise HTTPException(
                 status_code=403,
@@ -147,7 +147,7 @@ def get_teacher_assignments(
     teacher = db.query(Users).filter(
         Users.id == teacher_id,
         Users.school_id == current_user.school_id,
-        Users.role == "TEACHER"
+        Users.role.in_(["TEACHER", "CLASS_TEACHER"])
     ).first()
 
     if not teacher:

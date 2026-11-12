@@ -28,6 +28,7 @@ from mysite.security.permissions import (
     require_roles
 )
 from mysite.security.hashing import hash_password
+from mysite.services.passwords import encrypt_temp_password, set_temp_password
 
 
 router = APIRouter(
@@ -98,6 +99,7 @@ def create_teacher(
         phone=data.phone,
         role="TEACHER",
         hashed_password=hash_password(temporary_password),
+        temp_password_encrypted=encrypt_temp_password(temporary_password),
         is_temp_password=True,
         school_id=current_user.school_id,
         is_active=True
@@ -200,6 +202,7 @@ async def import_teachers_excel(
             full_name=full_name,
             role="TEACHER",
             hashed_password=hash_password(temporary_password),
+            temp_password_encrypted=encrypt_temp_password(temporary_password),
             is_temp_password=True,
             phone=phone,
             school_id=current_user.school_id,
@@ -289,6 +292,9 @@ def reset_user_password(
             temporary_password
         )
         user.is_temp_password = True
+        user.temp_password_encrypted = encrypt_temp_password(
+            temporary_password
+        )
 
         db.commit()
 

@@ -1,7 +1,7 @@
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
-from typing import Optional,List
+from typing import Optional, List, Literal
 
 from pydantic import (BaseModel,ConfigDict,Field,field_validator,)
 
@@ -256,3 +256,82 @@ class ParentAddChild(BaseModel):
 
 class ClassTeacherAssign(BaseModel):
     teacher_id: Optional[int] = None
+
+
+# =====================================================
+# Мугалимди сабакка байлоо (ТЗ: POST /admin/teacher-assignments)
+# =====================================================
+
+class AdminTeacherAssignmentCreate(BaseModel):
+    teacher_id: int
+    class_id: int
+    subject_id: int
+    # Берилбесе класстын окуу жылы алынат
+    academic_year: Optional[str] = None
+
+
+# =====================================================
+# Электрондук журнал
+# =====================================================
+
+AttendanceCode = Literal["Б", "Ж", "С", "К"]
+
+
+class JournalEntryIn(BaseModel):
+    student_id: int
+    grade_value: Optional[int] = Field(default=None, ge=2, le=5)
+    attendance: Optional[AttendanceCode] = None
+    comment: Optional[str] = Field(default=None, max_length=500)
+
+
+class JournalSave(BaseModel):
+    assignment_id: int
+    date: date
+    entries: List[JournalEntryIn] = Field(min_length=1)
+
+
+# =====================================================
+# Сабактан сурануу (ата-эне гана жөнөтөт)
+# =====================================================
+
+class AbsenceRequestCreate(BaseModel):
+    # Ата-эненин бир гана баласы болсо, көрсөтпөсө да болот
+    student_id: Optional[int] = None
+    # Берилбесе — бүгүнкү күн
+    target_date: Optional[date] = None
+    reason: str = Field(min_length=2, max_length=100)
+    comment: Optional[str] = Field(default=None, max_length=1000)
+
+
+class AbsenceReview(BaseModel):
+    comment: Optional[str] = Field(default=None, max_length=500)
+
+
+# =====================================================
+# Олимпиада
+# =====================================================
+
+class OlympiadCandidateCreate(BaseModel):
+    subject_id: int
+    student_id: int
+    note: Optional[str] = Field(default=None, max_length=500)
+
+
+class OlympiadAutoSelect(BaseModel):
+    subject_id: int
+    grade_number: Optional[int] = Field(default=None, ge=1, le=11)
+    limit: int = Field(default=3, ge=1, le=20)
+
+
+# =====================================================
+# Профиль
+# =====================================================
+
+class ProfileUpdate(BaseModel):
+    full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
+    phone: Optional[str] = Field(default=None, max_length=20)
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8, max_length=128)

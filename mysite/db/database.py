@@ -6,10 +6,16 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 load_dotenv()
 
+# Сыр сөз коддо сакталбайт — .env файлынан же чөйрө өзгөрмөсүнөн гана окулат
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+
+if not DB_PASSWORD:
+    raise RuntimeError("DB_PASSWORD .env файлында көрсөтүлгөн эмес")
+
 DATABASE_URL = URL.create(
     drivername="postgresql+psycopg2",
     username=os.getenv("DB_USER", "postgres"),
-    password=os.getenv("DB_PASSWORD","akbar07"),
+    password=DB_PASSWORD,
     host=os.getenv("DB_HOST", "localhost"),
     port=int(os.getenv("DB_PORT", "5432")),
     database=os.getenv("DB_NAME", "school"),

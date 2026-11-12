@@ -5,6 +5,7 @@ from os.path import abspath, dirname
 sys.path.insert(0, dirname(dirname(abspath(__file__))))
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
+from mysite.db.database import DATABASE_URL
 from mysite.db.models import Base
 
 
@@ -14,6 +15,13 @@ from alembic import context
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Базанын дареги .env файлынан алынат (alembic.ini'де сыр сөз сакталбайт).
+# configparser '%' белгисин өзгөчө окугандыктан, аны экилендиребиз.
+config.set_main_option(
+    "sqlalchemy.url",
+    DATABASE_URL.render_as_string(hide_password=False).replace("%", "%%"),
+)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

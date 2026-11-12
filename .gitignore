@@ -1,1 +1,14 @@
+# Сырлар
 .env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# IDE
+.idea/
+
+# Жүктөлгөн файлдар
+media/
