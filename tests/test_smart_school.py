@@ -528,3 +528,50 @@ def test_portal_announcements_profile(client):
                     headers=auth(S["teacher"]))
     assert r.status_code == 200
     assert login(client, "90000000000101", r.json()["temporary_password"])["requires_password_change"]
+
+
+# =====================================================
+# 7. Мугалимдердин тизмеси жана предметтерди башкаруу
+# =====================================================
+
+def test_teachers_and_subjects_crud(client):
+    h = auth(S["director"])
+
+    r = client.get("/teachers", headers=h)
+    assert r.status_code == 200, r.text
+    teachers = {t["id"]: t for t in r.json()}
+    assert set(teachers) == {S["teacher_id"], S["teacher2_id"]}
+    lead = teachers[S["teacher_id"]]
+    assert lead["is_class_teacher"] is True
+    assert lead["classes_led"][0]["name"] == "11-А"
+    assert lead["assignments"][0]["subject_name"] == "Кыргыз тили"
+    assert "temporary_password" not in lead
+
+    assert client.get("/teachers", headers=auth(S["teacher"])).status_code == 403
+    assert client.get("/teachers", headers=auth(S["erkin"])).status_code == 403
+    assert client.get(f"/teachers/{S['teacher_id']}", headers=auth(S["other_director"])).status_code == 404
+
+    r = client.get("/teachers?search=Башка", headers=h)
+    assert [t["id"] for t in r.json()] == [S["teacher2_id"]]
+
+    r = client.put(f"/teachers/{S['teacher2_id']}", headers=h, json={"phone": "+996555000011"})
+    assert r.status_code == 200 and r.json()["phone"] == "+996555000011"
+
+    r = client.delete(f"/teachers/{S['teacher2_id']}", headers=h)
+    assert r.status_code == 200
+    assert S["teacher2_id"] not in [t["id"] for t in client.get("/teachers", headers=h).json()]
+    r = client.get("/teachers?include_inactive=true", headers=h)
+    assert next(t for t in r.json() if t["id"] == S["teacher2_id"])["is_active"] is False
+    r = client.post(f"/teachers/{S['teacher2_id']}/activate", headers=h)
+    assert r.status_code == 200 and r.json()["is_active"] is True
+
+    # Предметтер
+    r = client.post("/subjects/", headers=h, json={"name": "Тарых"})
+    subject_id = r.json()["id"]
+    r = client.put(f"/subjects/{subject_id}", headers=h, json={"name": "Кыргыз тарыхы", "code": "HIST"})
+    assert r.status_code == 200 and r.json()["name"] == "Кыргыз тарыхы"
+    r = client.put(f"/subjects/{subject_id}", headers=h, json={"name": "Кыргыз тили"})
+    assert r.status_code == 400
+    assert client.put(f"/subjects/{subject_id}", headers=auth(S["teacher"]), json={"code": "X"}).status_code == 403
+    assert client.delete(f"/subjects/{S['subject']}", headers=h).status_code == 400
+    assert client.delete(f"/subjects/{subject_id}", headers=h).status_code == 200
