@@ -17,7 +17,7 @@ from mysite.db.database import get_db
 from mysite.db.models import Classes, Schools, Users
 from mysite.db.schema import SchoolAdminWithRole, SchoolUpdate, SystemSchoolCreate
 from mysite.security.permissions import require_roles
-from mysite.services.accounts import admin_row, create_school_admin
+from mysite.services.accounts import admin_row, create_school_admin, ensure_admin_limit
 from mysite.services.passwords import set_temp_password
 from mysite.services.school import ADMIN_ROLES, TEACHER_ROLES
 
@@ -310,6 +310,9 @@ def activate_admin(
     db: Session = Depends(get_db),
 ):
     user = get_admin_user_or_404(db, user_id)
+    if not user.is_active:
+        # Кайра күйгүзүү да директор/завуч чегинен ашпашы керек
+        ensure_admin_limit(db, user.school_id, user.role)
     user.is_active = True
     db.commit()
     return {"message": "Аккаунт кайра активдештирилди", "user_id": user.id}

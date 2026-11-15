@@ -757,5 +757,36 @@ def test_system_admin(client, db):
         "inn": "90000000000003", "full_name": "Биринчи Завуч", "role": "DEPUTY"})
     assert r.status_code == 201 and r.json()["role"] == "DEPUTY"
 
+    # Чектөөлөр: бир директор, эң көп 5 завуч (активдүүлөр гана саналат)
+    r = client.post(f"/system/schools/{new_school}/admins", headers=sa, json={
+        "inn": "90000000000310", "full_name": "Экинчи Директор", "role": "DIRECTOR"})
+    assert r.status_code == 400
+
+    deputy_ids = [deputy_id]
+    for index in range(4):
+        r = client.post("/admin/deputies", headers=d3, json={
+            "inn": f"9000000000032{index}", "full_name": f"Завуч Номер {index + 2}"})
+        assert r.status_code == 201, r.text
+        deputy_ids.append(r.json()["id"])
+
+    r = client.post("/admin/deputies", headers=d3, json={"inn": "90000000000329", "full_name": "Алтынчы Завуч"})
+    assert r.status_code == 400
+    r = client.post(f"/system/schools/{new_school}/admins", headers=sa, json={
+        "inn": "90000000000329", "full_name": "Алтынчы Завуч", "role": "DEPUTY"})
+    assert r.status_code == 400
+
+    # Бирин өчүргөндөн кийин жаңысын кошсо болот, ал эми өчүрүлгөнүн кайра күйгүзүүгө болбойт
+    assert client.delete(f"/admin/deputies/{deputy_ids[-1]}", headers=d3).status_code == 200
+    assert client.post("/admin/deputies", headers=d3, json={
+        "inn": "90000000000329", "full_name": "Алтынчы Завуч"}).status_code == 201
+    assert client.post(f"/system/users/{deputy_ids[-1]}/activate", headers=sa).status_code == 400
+
+    # Директорду өчүрүп, ордуна жаңысын дайындоо
+    assert client.post(f"/system/users/{d3_id}/deactivate", headers=sa).status_code == 200
+    r = client.post(f"/system/schools/{new_school}/admins", headers=sa, json={
+        "inn": "90000000000310", "full_name": "Экинчи Директор", "role": "DIRECTOR"})
+    assert r.status_code == 201, r.text
+    assert client.post(f"/system/users/{d3_id}/activate", headers=sa).status_code == 400
+
     r = client.get("/system/stats", headers=sa)
     assert r.json()["schools"] >= 3 and r.json()["deputies"] >= 2
