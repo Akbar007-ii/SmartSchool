@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from mysite.api import (auth,schools,users,classes,subjects,teacher_assignments,teacher_import,
                         student_import,students,student_promotion,parents,
                         admin,excel_templates,journal,homeworks,absence_requests,
-                        ratings,olympiad,me,announcements,notifications,public,teachers)
+                        ratings,olympiad,me,announcements,notifications,public,teachers,
+                        schedule)
 from mysite.db.database import get_db
 from mysite.services.files import MEDIA_ROOT, MEDIA_URL
 
@@ -46,6 +47,7 @@ app.include_router(excel_templates.router)
 # /classes/{id}/temp-passwords (класс жетекчинин сыр сөздөр тизмеси)
 app.include_router(admin.classes_router)
 app.include_router(journal.router)
+app.include_router(schedule.router)
 app.include_router(homeworks.router)
 app.include_router(absence_requests.router)
 app.include_router(ratings.router)
