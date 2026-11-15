@@ -25,8 +25,9 @@ from mysite.db.models import (
     TeacherAssignments,
     Users,
 )
-from mysite.db.schema import AdminTeacherAssignmentCreate, TeacherAssignmentOut
+from mysite.db.schema import AdminTeacherAssignmentCreate, SchoolAdminCreate, TeacherAssignmentOut
 from mysite.security.permissions import require_roles
+from mysite.services.accounts import admin_row, create_school_admin
 from mysite.services.passwords import decrypt_temp_password, set_temp_password
 from mysite.services.school import (
     ADMIN_ROLES,
@@ -200,7 +201,10 @@ def admin_reset_password(
     if user is None:
         raise HTTPException(status_code=404, detail="Колдонуучу табылган жок")
 
-    if user.role not in TEACHER_ROLES + ("STUDENT", "PARENT"):
+    # Директор завучтун сыр сөзүн жаңырта алат; директордун сыр сөзүн —
+    # платформанын администратору гана (POST /system/users/{id}/reset-password)
+    deputy_by_director = user.role == "DEPUTY" and current_user.role == "DIRECTOR"
+    if user.role not in TEACHER_ROLES + ("STUDENT", "PARENT") and not deputy_by_director:
         raise HTTPException(
             status_code=400,
             detail="Администратордун сыр сөзүн бул жерден өзгөртүүгө болбойт",
@@ -215,6 +219,66 @@ def admin_reset_password(
         "full_name": user.full_name,
         "temporary_password": password,
     }
+
+
+# =====================================================
+# Завучтар — директор кошот
+# =====================================================
+
+@router.get("/deputies")
+def list_deputies(
+    db: Session = Depends(get_db),
+    current_user: Users = Depends(require_roles(*ADMIN_ROLES)),
+):
+    deputies = db.query(Users).filter(
+        Users.school_id == current_user.school_id,
+        Users.role == "DEPUTY",
+    ).order_by(Users.full_name).all()
+
+    rows = [admin_row(d) for d in deputies]
+    # Убактылуу сыр сөздөрдү директор гана көрөт
+    if current_user.role != "DIRECTOR":
+        for row in rows:
+            row["temporary_password"] = None
+    return rows
+
+
+@router.post("/deputies", status_code=201)
+def create_deputy(
+    data: SchoolAdminCreate,
+    db: Session = Depends(get_db),
+    current_user: Users = Depends(require_roles("DIRECTOR")),
+):
+    user, password = create_school_admin(
+        db,
+        school_id=current_user.school_id,
+        inn=data.inn,
+        full_name=data.full_name,
+        phone=data.phone,
+        role="DEPUTY",
+    )
+    db.commit()
+    db.refresh(user)
+    return {**admin_row(user), "temporary_password": password}
+
+
+@router.delete("/deputies/{user_id}")
+def deactivate_deputy(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: Users = Depends(require_roles("DIRECTOR")),
+):
+    deputy = db.query(Users).filter(
+        Users.id == user_id,
+        Users.school_id == current_user.school_id,
+        Users.role == "DEPUTY",
+    ).first()
+    if deputy is None:
+        raise HTTPException(status_code=404, detail="Завуч табылган жок")
+
+    deputy.is_active = False
+    db.commit()
+    return {"message": "Завуч активсиз кылынды", "user_id": deputy.id}
 
 
 # =====================================================

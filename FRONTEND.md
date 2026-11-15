@@ -15,6 +15,7 @@
 | Ролу | ИНН (логин) | Аты-жөнү | Эскертүү |
 |---|---|---|---|
 | DIRECTOR | `10000000000001` | Асанов Бакыт | Админ-панель |
+| DEPUTY | `10000000000002` | Сыдыкова Айгүл | Завуч, директор сыяктуу админ-панель. Демо-маалымат ушул өзгөртүүдөн мурда жүктөлгөн серверде жок — директор `POST /admin/deputies` менен кошот |
 | TEACHER | `10000000000010` | Иванова Мария Петровна | 11-А класс жетекчи, Кыргыз тили |
 | TEACHER | `10000000000011` | Сапарова Гүлнара | 11-Б класс жетекчи, Математика, Физика |
 | STUDENT | `10000000000101` | Алиев Эркин | 11-А |
@@ -50,6 +51,7 @@ POST /auth/first-login-change
 
 | `role` | Кабинет |
 |---|---|
+| `SYSTEM_ADMIN` | Платформанын администратору — бардык мектептердин үстүндө: мектептерди кошуу/жабуу, директор жана завучтарды дайындоо. Эч бир мектепке таандык эмес (`GET /me` → `school: null`) |
 | `DIRECTOR`, `DEPUTY` | Админ-панель: мектеп, класстар, мугалимдер, Excel, бекитүүлөр, сыр сөздөр, олимпиада, жарыялар |
 | `TEACHER`, `CLASS_TEACHER` | Журнал, үй тапшырма. `GET /me` ичинде `is_class_teacher: true` болсо — суранууларды кароо жана класстын сыр сөздөрү |
 | `STUDENT` | Күндөлүк, үй тапшырма, рейтинг, профиль. **Сурануу баракчасы жок** |
@@ -162,6 +164,23 @@ await fetch(`${BASE_URL}/homeworks`, {method: "POST", headers: {Authorization: `
 | Окуучулардын логин/сыр сөздөрү | `GET /classes/{id}/temp-passwords` (`?format=xlsx` — Excel файл) |
 | Окуучунун сыр сөзүн жаңыртуу | `POST /classes/{id}/students/{sid}/reset-password` |
 
+### Платформанын администратору (`SYSTEM_ADMIN`)
+
+Кирүү — башкалар сыяктуу ИНН жана сыр сөз менен. Биринчи администратор серверде скрипт менен түзүлөт
+(`create_system_admin.py`, DEPLOY.md'ни караңыз). Бардык эндпоинттер башка ролдор үчүн `403`.
+
+| Экран | Эндпоинт |
+|---|---|
+| Платформанын статистикасы | `GET /system/stats` → `schools, active_schools, directors, deputies, teachers, students, parents` |
+| Мектептердин тизмеси | `GET /system/schools?search=&include_inactive=true` — ар биринде `stats` (`students, teachers, classes`), `is_active` |
+| Мектеп кошуу (директору менен) | `POST /system/schools` `{"name", "address"?, "phone"?, "email"?, "director": {"inn", "full_name", "phone"?}}` → `director.temporary_password` |
+| Бир мектеп + анын жетекчилери | `GET /system/schools/{id}` → `admins[]` (директор/завуч; сыр сөзүн алмаштыра элек болсо `temporary_password`) |
+| Мектепти өзгөртүү | `PUT /system/schools/{id}` |
+| Мектепти жабуу / ачуу | `POST /system/schools/{id}/deactivate`, `.../activate` — жабык мектептин колдонуучулары кире албайт, маалымат сакталат |
+| Мектепке директор же завуч кошуу | `POST /system/schools/{id}/admins` `{"inn", "full_name", "phone"?, "role": "DIRECTOR" \| "DEPUTY"}` |
+| Директордун/завучтун сыр сөзүн жаңыртуу | `POST /system/users/{id}/reset-password` |
+| Директорду/завучту өчүрүү / кайра ачуу | `POST /system/users/{id}/deactivate`, `.../activate` |
+
 ### Сабактардын жадыбалы (расписание)
 
 Түзүү, өзгөртүү, өчүрүү — **директор жана завуч гана**. Көрүү — бардыгы.
@@ -196,7 +215,8 @@ await fetch(`${BASE_URL}/homeworks`, {method: "POST", headers: {Authorization: `
 | Мугалимдерди Excel менен жүктөө | `POST /admin/excel/import-teachers` (form: `file`) |
 | Бирден кошуу | `POST /students/`, `POST /users/create-teacher` |
 | Мугалимдер жана байлоо | `POST /admin/teacher-assignments`, `GET /teacher-assignments/`, `DELETE /teacher-assignments/{id}` |
-| Мугалимдердин сыр сөздөрү | `GET /admin/teachers/temp-passwords` (`?format=xlsx`), `POST /admin/users/{id}/reset-password` |
+| Мугалимдердин сыр сөздөрү | `GET /admin/teachers/temp-passwords` (`?format=xlsx`), `POST /admin/users/{id}/reset-password` (директор завучтун сыр сөзүн да жаңырта алат) |
+| Завучтар | `GET /admin/deputies`; кошуу `POST /admin/deputies` `{"inn", "full_name", "phone"?}` → `temporary_password`; өчүрүү `DELETE /admin/deputies/{id}` — кошуу/өчүрүү директор гана |
 | Суранууларды көзөмөлдөө | `GET /absence-requests` (көрүү гана) |
 | Журналды көрүү | `GET /journal/assignments`, `GET /journal?...` (`can_edit: false`) |
 | Олимпиадалык аналитика | `GET /olympiad/analytics`, `POST /olympiad/auto-select`, `POST /olympiad/candidates/{id}/approve` |

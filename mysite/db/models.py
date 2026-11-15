@@ -135,9 +135,11 @@ class Users(Base):
         nullable=True
     )
 
-    school_id: Mapped[int] = mapped_column(
+    # SYSTEM_ADMIN (платформанын администратору) эч бир мектепке таандык эмес,
+    # калган бардык ролдор үчүн милдеттүү (check_user_school)
+    school_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("schools.id"),
-        nullable=False,
+        nullable=True,
         index=True
     )
 
@@ -152,7 +154,7 @@ class Users(Base):
         server_default=func.now()
     )
 
-    school: Mapped["Schools"] = relationship(
+    school: Mapped[Optional["Schools"]] = relationship(
         back_populates="users"
     )
 
@@ -197,6 +199,11 @@ class Users(Base):
             "role IN ('SYSTEM_ADMIN','DIRECTOR', 'DEPUTY', 'CLASS_TEACHER', "
             "'TEACHER', 'STUDENT', 'PARENT')",
             name="check_user_role"
+        ),
+
+        CheckConstraint(
+            "role = 'SYSTEM_ADMIN' OR school_id IS NOT NULL",
+            name="check_user_school"
         ),
     )
 

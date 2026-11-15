@@ -35,7 +35,9 @@ def get_current_user(
 
     try:
         user_id = int(payload.get("sub"))
-        token_school_id = int(payload.get("school_id"))
+        raw_school_id = payload.get("school_id")
+        # SYSTEM_ADMIN эч бир мектепке таандык эмес — токенде school_id = null
+        token_school_id = int(raw_school_id) if raw_school_id is not None else None
     except (ValueError, TypeError):
         raise credentials_error
 

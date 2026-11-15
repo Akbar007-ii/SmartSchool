@@ -676,3 +676,86 @@ def test_schedule(client):
     # Өчүрүү
     assert client.delete(f"/schedule/{lesson_a['id']}", headers=auth(S["teacher"])).status_code == 403
     assert client.delete(f"/schedule/{lesson_a['id']}", headers=h).status_code == 200
+
+
+# =====================================================
+# 9. Платформанын администратору (SYSTEM_ADMIN)
+# =====================================================
+
+def test_system_admin(client, db):
+    from mysite.services.passwords import set_temp_password
+
+    admin = Users(inn="90000000000900", full_name="Платформа Админ", role="SYSTEM_ADMIN",
+                  hashed_password="", school_id=None)
+    temp = set_temp_password(admin)
+    db.add(admin)
+    db.commit()
+
+    sa = auth(login_and_change(client, "90000000000900", temp))
+
+    r = client.get("/me", headers=sa)
+    assert r.status_code == 200 and r.json()["role"] == "SYSTEM_ADMIN" and r.json()["school"] is None
+
+    # Мектеп администраторлору /system жабык
+    for token in (S["director"], S["teacher"], S["erkin"], S["parent"]):
+        assert client.get("/system/schools", headers=auth(token)).status_code == 403
+
+    r = client.get("/system/schools", headers=sa)
+    assert r.status_code == 200
+    mine = next(s for s in r.json() if s["id"] == S["school"])
+    assert mine["stats"]["students"] == 3
+
+    # Жаңы мектеп + директор
+    r = client.post("/system/schools", headers=sa, json={
+        "name": "Тест мектеп №3", "address": "Ош",
+        "director": {"inn": "90000000000301", "full_name": "Үчүнчү Директор"}})
+    assert r.status_code == 201, r.text
+    new_school = r.json()["school"]["id"]
+    new_director_pw = r.json()["director"]["temporary_password"]
+    assert r.json()["school"]["director_name"] == "Үчүнчү Директор"
+
+    # ИНН кайталанса мектеп да түзүлбөйт
+    r = client.post("/system/schools", headers=sa, json={
+        "name": "Кайталанма мектеп", "director": {"inn": "90000000000301", "full_name": "Дагы Директор"}})
+    assert r.status_code == 400
+    assert not [s for s in client.get("/system/schools?search=Кайталанма", headers=sa).json()]
+
+    # Жаңы директор кирип, өз мектебин гана көрөт
+    d3 = auth(login_and_change(client, "90000000000301", new_director_pw))
+    assert client.get("/schools/me", headers=d3).json()["id"] == new_school
+    assert client.get(f"/classes/{S['class']}", headers=d3).status_code == 404
+
+    # Директор завуч кошот, завуч киргенде админ укуктары бар
+    r = client.post("/admin/deputies", headers=d3, json={"inn": "90000000000302", "full_name": "Үчүнчү Завуч"})
+    assert r.status_code == 201, r.text
+    deputy_id, deputy_pw = r.json()["id"], r.json()["temporary_password"]
+    dep = auth(login_and_change(client, "90000000000302", deputy_pw))
+    assert client.post("/classes/", headers=dep, json={
+        "grade_number": 5, "letter": "А", "academic_year": "2026-2027"}).status_code == 200
+    # Завуч башка завуч кошо албайт, тизмеде сыр сөздөрдү көрбөйт
+    assert client.post("/admin/deputies", headers=dep, json={
+        "inn": "90000000000303", "full_name": "Дагы Завуч"}).status_code == 403
+    assert client.get("/admin/deputies", headers=dep).json()[0]["temporary_password"] is None
+    # Директор завучтун сыр сөзүн жаңырта алат
+    assert client.post(f"/admin/users/{deputy_id}/reset-password", headers=d3).status_code == 200
+
+    # Мектепти жабуу: колдонуучулары кире албайт
+    assert client.post(f"/system/schools/{new_school}/deactivate", headers=sa).status_code == 200
+    assert client.get("/me", headers=d3).status_code == 403
+    assert client.post(f"/system/schools/{new_school}/activate", headers=sa).status_code == 200
+    assert client.get("/me", headers=d3).status_code == 200
+
+    # Директордун сыр сөзүн платформанын админи гана жаңыртат
+    d3_id = next(a["id"] for a in client.get(f"/system/schools/{new_school}", headers=sa).json()["admins"]
+                 if a["role"] == "DIRECTOR")
+    assert client.post(f"/admin/users/{d3_id}/reset-password", headers=dep).status_code == 400
+    r = client.post(f"/system/users/{d3_id}/reset-password", headers=sa)
+    assert r.status_code == 200 and r.json()["temporary_password"]
+
+    # Бар мектепке кошумча директор/завуч
+    r = client.post(f"/system/schools/{S['school']}/admins", headers=sa, json={
+        "inn": "90000000000003", "full_name": "Биринчи Завуч", "role": "DEPUTY"})
+    assert r.status_code == 201 and r.json()["role"] == "DEPUTY"
+
+    r = client.get("/system/stats", headers=sa)
+    assert r.json()["schools"] >= 3 and r.json()["deputies"] >= 2

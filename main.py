@@ -10,7 +10,7 @@ from mysite.api import (auth,schools,users,classes,subjects,teacher_assignments,
                         student_import,students,student_promotion,parents,
                         admin,excel_templates,journal,homeworks,absence_requests,
                         ratings,olympiad,me,announcements,notifications,public,teachers,
-                        schedule)
+                        schedule,system)
 from mysite.db.database import get_db
 from mysite.services.files import MEDIA_ROOT, MEDIA_URL
 
@@ -42,6 +42,7 @@ app.mount(MEDIA_URL, StaticFiles(directory=MEDIA_ROOT), name="media")
 app.include_router(auth.router)
 app.include_router(me.router)
 app.include_router(public.router)
+app.include_router(system.router)
 app.include_router(admin.router)
 app.include_router(excel_templates.router)
 # /classes/{id}/temp-passwords (класс жетекчинин сыр сөздөр тизмеси)
