@@ -370,6 +370,32 @@ class ScheduleLessonUpdate(BaseModel):
     room: Optional[str] = Field(default=None, max_length=50)
 
 
+# =====================================================
+# Платформанын администратору (SYSTEM_ADMIN) жана мектеп жетекчилери
+# =====================================================
+
+class SchoolAdminCreate(BaseModel):
+    inn: str = Field(min_length=14, max_length=14)
+    full_name: str = Field(min_length=3, max_length=200)
+    phone: Optional[str] = Field(default=None, max_length=20)
+
+    @field_validator("inn")
+    @classmethod
+    def validate_inn(cls, value):
+        if not value.isdigit():
+            raise ValueError("ИНН 14 цифрадан турушу керек")
+        return value
+
+
+class SchoolAdminWithRole(SchoolAdminCreate):
+    role: Literal["DIRECTOR", "DEPUTY"] = "DIRECTOR"
+
+
+class SystemSchoolCreate(SchoolCreate):
+    # Мектеп түзүлөрү менен анын директору да түзүлөт
+    director: SchoolAdminCreate
+
+
 class SubjectUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=100)
     code: Optional[str] = Field(default=None, max_length=30)
