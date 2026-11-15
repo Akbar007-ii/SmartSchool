@@ -575,3 +575,104 @@ def test_teachers_and_subjects_crud(client):
     assert client.put(f"/subjects/{subject_id}", headers=auth(S["teacher"]), json={"code": "X"}).status_code == 403
     assert client.delete(f"/subjects/{S['subject']}", headers=h).status_code == 400
     assert client.delete(f"/subjects/{subject_id}", headers=h).status_code == 200
+
+
+# =====================================================
+# 8. Сабактардын жадыбалы
+# =====================================================
+
+def test_schedule(client):
+    from datetime import date, timedelta
+
+    h = auth(S["director"])
+
+    # Кошумча класс, предмет жана бекитүүлөр
+    r = client.post("/classes/", headers=h, json={
+        "grade_number": 11, "letter": "Б", "academic_year": "2026-2027"})
+    class_b = r.json()["id"]
+    r = client.post("/subjects/", headers=h, json={"name": "Математика"})
+    math = r.json()["id"]
+    kg_a = S["assignment"]  # 11-А, Кыргыз тили, teacher
+    kg_b = client.post("/admin/teacher-assignments", headers=h, json={
+        "teacher_id": S["teacher_id"], "class_id": class_b, "subject_id": S["subject"]}).json()["id"]
+    math_a = client.post("/admin/teacher-assignments", headers=h, json={
+        "teacher_id": S["teacher2_id"], "class_id": S["class"], "subject_id": math}).json()["id"]
+
+    r = client.get("/schedule/bells", headers=auth(S["erkin"]))
+    assert r.json()["bells"][0] == {"lesson_number": 1, "start_time": "08:00", "end_time": "08:45"}
+
+    # Директор/завуч гана түзөт
+    body = {"assignment_id": kg_a, "weekday": 1, "lesson_number": 1, "room": "101"}
+    for token in (S["teacher"], S["erkin"], S["parent"]):
+        assert client.post("/schedule", headers=auth(token), json=body).status_code == 403
+
+    r = client.post("/schedule", headers=h, json=body)
+    assert r.status_code == 201, r.text
+    lesson_a = r.json()
+    assert lesson_a["start_time"] == "08:00" and lesson_a["class_name"] == "11-А"
+    assert lesson_a["teacher_name"] == "Класс Жетекчи Мугалим"
+
+    # Класстын бир убакта эки сабагы болбойт
+    r = client.post("/schedule", headers=h, json={"assignment_id": math_a, "weekday": 1, "lesson_number": 1})
+    assert r.status_code == 409 and "11-А" in r.json()["detail"]
+
+    # Мугалим бир убакта эки класста болбойт
+    r = client.post("/schedule", headers=h, json={"assignment_id": kg_b, "weekday": 1, "lesson_number": 1})
+    assert r.status_code == 409 and "Мугалим" in r.json()["detail"]
+
+    # Кабинет бош эмес
+    r = client.post("/schedule", headers=h, json={
+        "assignment_id": math_a, "weekday": 1, "lesson_number": 2, "room": "101"})
+    assert r.status_code == 201, r.text
+    r = client.post("/schedule", headers=h, json={
+        "assignment_id": kg_b, "weekday": 1, "lesson_number": 2, "room": "101"})
+    assert r.status_code == 409 and "кабинет" in r.json()["detail"]
+
+    # Өз убактысы менен; кесилишкен убакыт — 409
+    r = client.post("/schedule", headers=h, json={
+        "assignment_id": kg_b, "weekday": 2, "lesson_number": 1,
+        "start_time": "09:00", "end_time": "09:45"})
+    assert r.status_code == 201 and r.json()["start_time"] == "09:00"
+    r = client.post("/schedule", headers=h, json={
+        "assignment_id": kg_a, "weekday": 2, "lesson_number": 2,
+        "start_time": "09:30", "end_time": "10:15"})
+    assert r.status_code == 409
+    r = client.post("/schedule", headers=h, json={
+        "assignment_id": kg_a, "weekday": 2, "lesson_number": 3,
+        "start_time": "10:00", "end_time": "09:00"})
+    assert r.status_code == 400
+
+    # Өзгөртүү
+    r = client.put(f"/schedule/{lesson_a['id']}", headers=h, json={"lesson_number": 2})
+    assert r.status_code == 409
+    r = client.put(f"/schedule/{lesson_a['id']}", headers=h, json={"weekday": 3})
+    assert r.status_code == 200 and r.json()["weekday_name"] == "Шаршемби"
+    r = client.put(f"/schedule/{lesson_a['id']}", headers=h, json={"assignment_id": kg_b})
+    assert r.status_code == 400
+    assert client.put(f"/schedule/{lesson_a['id']}", headers=auth(S["teacher"]),
+                      json={"room": "1"}).status_code == 403
+
+    # Көрүү
+    r = client.get(f"/schedule/class/{S['class']}", headers=auth(S["erkin"]))
+    assert [(x["weekday"], x["lesson_number"]) for x in r.json()["lessons"]] == [(1, 2), (3, 1)]
+
+    r = client.get(f"/schedule/teacher/{S['teacher_id']}", headers=auth(S["director"]))
+    assert {x["class_name"] for x in r.json()["lessons"]} == {"11-А", "11-Б"}
+
+    r = client.get("/schedule/me", headers=auth(S["teacher"]))
+    assert len(r.json()["lessons"]) == 2
+
+    wednesday = date.today() + timedelta(days=(3 - date.today().isoweekday()) % 7)
+    r = client.get(f"/schedule/me?day={wednesday}", headers=auth(S["erkin"]))
+    assert [x["subject_name"] for x in r.json()["lessons"]] == ["Кыргыз тили"]
+    r = client.get(f"/schedule/me?student_id={S['bekzat_id']}", headers=auth(S["parent"]))
+    assert len(r.json()["lessons"]) == 2
+    sunday = date.today() + timedelta(days=(7 - date.today().isoweekday()) % 7)
+    assert client.get(f"/schedule/me?day={sunday}", headers=auth(S["erkin"])).json()["lessons"] == []
+    assert client.get("/schedule/today", headers=auth(S["erkin"])).status_code == 200
+
+    assert client.get(f"/schedule/class/{S['class']}", headers=auth(S["other_director"])).status_code == 404
+
+    # Өчүрүү
+    assert client.delete(f"/schedule/{lesson_a['id']}", headers=auth(S["teacher"])).status_code == 403
+    assert client.delete(f"/schedule/{lesson_a['id']}", headers=h).status_code == 200

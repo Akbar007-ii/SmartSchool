@@ -1,5 +1,5 @@
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from enum import Enum
 from typing import Optional, List, Literal
 
@@ -344,6 +344,30 @@ class PasswordChange(BaseModel):
 class TeacherUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
     phone: Optional[str] = Field(default=None, max_length=20)
+
+
+# =====================================================
+# Сабактардын жадыбалы
+# =====================================================
+
+class ScheduleLessonCreate(BaseModel):
+    # Класс жана мугалим+предмет ушул бекитүүдөн алынат
+    assignment_id: int
+    weekday: int = Field(ge=1, le=6, description="1 = дүйшөмбү ... 6 = ишемби")
+    lesson_number: int = Field(ge=1, le=10)
+    # Берилбесе, коңгуроолордун демейки жадыбалынан алынат (GET /schedule/bells)
+    start_time: Optional[time] = None
+    end_time: Optional[time] = None
+    room: Optional[str] = Field(default=None, max_length=50)
+
+
+class ScheduleLessonUpdate(BaseModel):
+    assignment_id: Optional[int] = None
+    weekday: Optional[int] = Field(default=None, ge=1, le=6)
+    lesson_number: Optional[int] = Field(default=None, ge=1, le=10)
+    start_time: Optional[time] = None
+    end_time: Optional[time] = None
+    room: Optional[str] = Field(default=None, max_length=50)
 
 
 class SubjectUpdate(BaseModel):

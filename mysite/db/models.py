@@ -3,11 +3,13 @@ from datetime import datetime
 from typing import List, Optional
 
 from datetime import date as dt_date
+from datetime import time as dt_time
 
 from sqlalchemy import (
     JSON,
     Date,
     Text,
+    Time,
     Integer,
     String,
     Boolean,
@@ -880,3 +882,62 @@ class Notifications(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
+
+# =====================================================
+# 16. SCHEDULE — сабактардын жадыбалы
+# =====================================================
+# Бир жазуу = бир класстын жуманын бир күнүндөгү бир сабагы.
+# Мугалим жана предмет teacher_assignments аркылуу (assignment_id) алынат.
+# weekday: 1 = дүйшөмбү ... 6 = ишемби.
+
+class ScheduleLessons(Base):
+    __tablename__ = "schedule_lessons"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    school_id: Mapped[int] = mapped_column(
+        ForeignKey("schools.id"), nullable=False, index=True
+    )
+
+    class_id: Mapped[int] = mapped_column(
+        ForeignKey("classes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    assignment_id: Mapped[int] = mapped_column(
+        ForeignKey("teacher_assignments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
+    academic_year: Mapped[str] = mapped_column(String(20), nullable=False)
+
+    weekday: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    lesson_number: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    start_time: Mapped[dt_time] = mapped_column(Time, nullable=False)
+
+    end_time: Mapped[dt_time] = mapped_column(Time, nullable=False)
+
+    room: Mapped[Optional[str]] = mapped_column(String(50))
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    assignment: Mapped["TeacherAssignments"] = relationship()
+    school_class: Mapped["Classes"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint(
+            "class_id", "academic_year", "weekday", "lesson_number",
+            name="unique_class_lesson_slot"
+        ),
+        CheckConstraint("weekday >= 1 AND weekday <= 6", name="check_schedule_weekday"),
+        CheckConstraint(
+            "lesson_number >= 1 AND lesson_number <= 10",
+            name="check_schedule_lesson_number"
+        ),
+        CheckConstraint("start_time < end_time", name="check_schedule_time_order"),
+        Index("ix_schedule_school_year_day", "school_id", "academic_year", "weekday"),
+    )

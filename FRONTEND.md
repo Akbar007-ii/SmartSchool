@@ -162,6 +162,27 @@ await fetch(`${BASE_URL}/homeworks`, {method: "POST", headers: {Authorization: `
 | Окуучулардын логин/сыр сөздөрү | `GET /classes/{id}/temp-passwords` (`?format=xlsx` — Excel файл) |
 | Окуучунун сыр сөзүн жаңыртуу | `POST /classes/{id}/students/{sid}/reset-password` |
 
+### Сабактардын жадыбалы (расписание)
+
+Түзүү, өзгөртүү, өчүрүү — **директор жана завуч гана**. Көрүү — бардыгы.
+
+| Экран | Эндпоинт |
+|---|---|
+| Жуманын күндөрү жана коңгуроолор (сетканын саптары) | `GET /schedule/bells` → `weekdays[]` (1 = Дүйшөмбү … 6 = Ишемби), `bells[]` (`lesson_number`, `start_time`, `end_time`) |
+| Завуч: класстын жумалык сеткасы | `GET /schedule/class/{class_id}` (`?weekday=` — бир күн) |
+| Мугалимдин жадыбалы | `GET /schedule/teacher/{teacher_id}` |
+| Уячага сабак коюу | `POST /schedule` `{"assignment_id", "weekday", "lesson_number", "room"?, "start_time"?, "end_time"?}` — класс, мугалим, предмет `assignment_id`'ден алынат; убакыт берилбесе коңгуроо боюнча |
+| Сабакты жылдыруу / өзгөртүү | `PUT /schedule/{id}` (ошол эле талаалар, баары милдеттүү эмес) |
+| Сабакты өчүрүү | `DELETE /schedule/{id}` |
+| «Бүгүнкү жадыбал» (мугалим, окуучу, ата-эне) | `GET /schedule/today` (ата-эне: `?student_id=`) |
+| Каалаган күндүн / бүт жуманын жадыбалы | `GET /schedule/me?day=YYYY-MM-DD` же `day`сыз — бүт жума |
+
+Ар бир сабак: `id, class_id, class_name, weekday, weekday_name, lesson_number, start_time ("08:00"), end_time, room, assignment_id, subject_id, subject_name, teacher_id, teacher_name`.
+
+Кесилишүү болсо `409` жана себеби `detail`'де: класста ошол убакта сабак бар, мугалим башка класста, же кабинет бош эмес.
+Ячейкага коюуга боло турган сабактар — `GET /journal/assignments?class_id=` (класстын бекитүүлөрү).
+Журналда: мугалимдин `GET /schedule/today` сабагынан `assignment_id` алып, `GET /journal?assignment_id=&day=<бүгүн>` ачса болот.
+
 ### Директор / Завуч (админ-панель)
 | Экран | Эндпоинт |
 |---|---|
