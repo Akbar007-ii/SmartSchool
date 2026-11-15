@@ -167,7 +167,9 @@ await fetch(`${BASE_URL}/homeworks`, {method: "POST", headers: {Authorization: `
 |---|---|
 | Мектептин баракчасы | `GET/PUT /schools/me`, `POST /schools/me/banner`, `POST /schools/me/logo` |
 | Класстар | `GET/POST /classes/`, `PUT/DELETE /classes/{id}`, `PUT /classes/{id}/class-teacher` |
-| Предметтер | `GET/POST /subjects/` |
+| Предметтер | `GET/POST /subjects/`, `PUT/DELETE /subjects/{id}` (мугалим бекитилген предмет өчпөйт → `400`) |
+| Мугалимдердин тизмеси | `GET /teachers?search=&include_inactive=` — ар биринде `classes_led`, `assignments`, `is_class_teacher` |
+| Мугалимди өзгөртүү / өчүрүү | `GET/PUT /teachers/{id}`, `DELETE /teachers/{id}` (активсиз кылат), `POST /teachers/{id}/activate` |
 | Excel үлгүлөрү | `GET /admin/excel/templates/students`, `.../teachers` |
 | Окуучуларды Excel менен жүктөө | `POST /admin/excel/import-students` (form: `class_id`, `file`) |
 | Мугалимдерди Excel менен жүктөө | `POST /admin/excel/import-teachers` (form: `file`) |

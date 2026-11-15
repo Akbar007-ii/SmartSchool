@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from mysite.api import (auth,schools,users,classes,subjects,teacher_assignments,teacher_import,
                         student_import,students,student_promotion,parents,
                         admin,excel_templates,journal,homeworks,absence_requests,
-                        ratings,olympiad,me,announcements,notifications,public)
+                        ratings,olympiad,me,announcements,notifications,public,teachers)
 from mysite.db.database import get_db
 from mysite.services.files import MEDIA_ROOT, MEDIA_URL
 
@@ -57,6 +57,7 @@ app.include_router(schools.router)
 app.include_router(classes.router)
 app.include_router(subjects.router)
 app.include_router(teacher_assignments.router)
+app.include_router(teachers.router)
 app.include_router(teacher_import.router)
 app.include_router(student_promotion.router)
 app.include_router(student_import.router)

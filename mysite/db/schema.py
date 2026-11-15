@@ -335,3 +335,17 @@ class ProfileUpdate(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str = Field(min_length=1)
     new_password: str = Field(min_length=8, max_length=128)
+
+
+# =====================================================
+# Мугалимдерди жана предметтерди өзгөртүү
+# =====================================================
+
+class TeacherUpdate(BaseModel):
+    full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
+    phone: Optional[str] = Field(default=None, max_length=20)
+
+
+class SubjectUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=2, max_length=100)
+    code: Optional[str] = Field(default=None, max_length=30)
