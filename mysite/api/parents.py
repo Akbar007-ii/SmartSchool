@@ -2,7 +2,7 @@
 import secrets
 import string
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -11,10 +11,34 @@ from mysite.db.models import Users, ParentStudents
 from mysite.db.schema import ParentRegister, ParentAddChild
 from mysite.security.hashing import hash_password, verify_password
 from mysite.security.jwt import create_access_token
+from mysite.security import login_limit
 from mysite.security.permissions import (
     get_current_user,
     require_roles
 )
+
+# Окуучуга эң көп эки ата-эне (апа жана ата) байланат.
+MAX_PARENTS_PER_STUDENT = 2
+
+
+def ensure_can_link(db: Session, parent_id, student_id: int) -> None:
+    """Ушул ата-эне мурда байланганбы жана окуучунун ата-энелеринин саны толгонбу."""
+    links = db.query(ParentStudents).filter(
+        ParentStudents.student_id == student_id
+    ).all()
+
+    if parent_id is not None and any(link.parent_id == parent_id for link in links):
+        raise HTTPException(
+            status_code=400,
+            detail="Бул окуучу сиздин аккаунтуңузга мурда байланган"
+        )
+
+    if len(links) >= MAX_PARENTS_PER_STUDENT:
+        raise HTTPException(
+            status_code=400,
+            detail="Бул окуучуга эки ата-эне байланган — дагы кошууга болбойт"
+        )
+
 
 router = APIRouter(
     prefix="/parents",
@@ -42,6 +66,7 @@ def get_parent_token(parent):
 @router.post("/register")
 def register_parent(
     data: ParentRegister,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     if not data.inn.isdigit() or len(data.inn) != 14:
@@ -57,6 +82,8 @@ def register_parent(
             status_code=400,
             detail="Бул ИНН мурда катталган"
         )
+
+    login_limit.ensure_not_blocked(data.student_inn, login_limit.client_ip(request))
 
     student = db.query(Users).filter(
         Users.inn == data.student_inn,
@@ -80,20 +107,13 @@ def register_parent(
         data.student_password,
         student.hashed_password
     ):
+        login_limit.record_failure(data.student_inn, login_limit.client_ip(request))
         raise HTTPException(
             status_code=400,
             detail="Окуучунун ИННи же паролу туура эмес"
         )
 
-    existing_link = db.query(ParentStudents).filter(
-        ParentStudents.student_id == student.id
-    ).first()
-
-    if existing_link:
-        raise HTTPException(
-            status_code=400,
-            detail="Бул окуучу башка ата-энеге байланышкан"
-        )
+    ensure_can_link(db, None, student.id)
 
     try:
         parent = Users(
@@ -147,11 +167,14 @@ def register_parent(
 @router.post("/add-child")
 def add_child(
     data: ParentAddChild,
+    request: Request,
     current_user: Users = Depends(
         require_roles("PARENT")
     ),
     db: Session = Depends(get_db)
 ):
+    login_limit.ensure_not_blocked(data.student_inn, login_limit.client_ip(request))
+
     student = db.query(Users).filter(
         Users.inn == data.student_inn,
         Users.role == "STUDENT",
@@ -175,20 +198,13 @@ def add_child(
         data.student_password,
         student.hashed_password
     ):
+        login_limit.record_failure(data.student_inn, login_limit.client_ip(request))
         raise HTTPException(
             status_code=400,
             detail="Окуучунун ИННи же паролу туура эмес"
         )
 
-    existing = db.query(ParentStudents).filter(
-        ParentStudents.student_id == student.id
-    ).first()
-
-    if existing:
-        raise HTTPException(
-            status_code=400,
-            detail="Бул окуучу башка ата-энеге байланышкан"
-        )
+    ensure_can_link(db, current_user.id, student.id)
 
     try:
         link = ParentStudents(

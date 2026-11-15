@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from mysite.db.database import get_db
@@ -8,6 +8,7 @@ from mysite.db.schema import LoginRequest, FirstLoginChange, TokenResponse
 from mysite.security.hashing import verify_password,hash_password
 
 from mysite.security.jwt import create_access_token
+from mysite.security import login_limit
 from mysite.security.permissions import get_current_user
 
 
@@ -15,14 +16,18 @@ router = APIRouter(prefix="/auth",tags=["Authentication"])
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: LoginRequest,db: Session = Depends(get_db)):
+def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    ip = login_limit.client_ip(request)
+    # Сыр сөздү тандап табууга каршы: ийгиликсиз аракеттер чектелет (429)
+    login_limit.ensure_not_blocked(data.inn, ip)
+
     user = db.query(Users).filter(Users.inn == data.inn).first()
-    if not user:
+    if not user or not verify_password(data.password, user.hashed_password):
+        login_limit.record_failure(data.inn, ip)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="ИНН же сыр сөз туура эмес")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Аккаунт убактылуу жабылган")
-    if not verify_password(data.password,user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="ИНН же сыр сөз туура эмес")
+    login_limit.reset(data.inn)
 
     access_token = create_access_token({
         "sub": str(user.id),

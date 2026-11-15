@@ -181,6 +181,25 @@ def test_parent_and_student_accounts(client):
     assert r.status_code == 200 and len(r.json()["children"]) == 2
     assert r.json()["children"][0]["class_name"] == "11-А"
 
+    # Ошол эле баланы кайра кошууга болбойт
+    r = client.post("/parents/add-child", headers=auth(S["parent"]), json={
+        "student_inn": bekzat["inn"], "student_password": bekzat["temporary_password"]})
+    assert r.status_code == 400
+
+    # Экинчи ата-эне (ата) ошол эле балага байланат, үчүнчүсү — жок
+    r = client.post("/parents/register", json={
+        "inn": "90000000000202", "full_name": "Асанов Бакыт", "password": "Parent#2026",
+        "student_inn": bekzat["inn"], "student_password": bekzat["temporary_password"]})
+    assert r.status_code == 200, r.text
+    second_parent = r.json()["access_token"]
+    r = client.get(f"/journal/summary?student_id={bekzat['id']}", headers=auth(second_parent))
+    assert r.status_code == 200
+
+    r = client.post("/parents/register", json={
+        "inn": "90000000000203", "full_name": "Үчүнчү Ата-эне", "password": "Parent#2026",
+        "student_inn": bekzat["inn"], "student_password": bekzat["temporary_password"]})
+    assert r.status_code == 400
+
 
 # =====================================================
 # 2. Сабактан сурануу: АТА-ЭНЕ ГАНА, 08:00 эрежеси
@@ -681,6 +700,21 @@ def test_schedule(client):
 # =====================================================
 # 9. Платформанын администратору (SYSTEM_ADMIN)
 # =====================================================
+
+def test_login_rate_limit(client):
+    from mysite.security import login_limit
+
+    inn = "90000000000999"
+    try:
+        for _ in range(login_limit.MAX_FAILURES_PER_INN):
+            r = client.post("/auth/login", json={"inn": inn, "password": "wrong-password"})
+            assert r.status_code == 401
+        r = client.post("/auth/login", json={"inn": inn, "password": "wrong-password"})
+        assert r.status_code == 429 and int(r.headers["Retry-After"]) > 0
+    finally:
+        login_limit.reset(inn)
+        login_limit._failures.clear()
+
 
 def test_system_admin(client, db):
     from mysite.services.passwords import set_temp_password

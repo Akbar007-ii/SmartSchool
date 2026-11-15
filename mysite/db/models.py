@@ -521,9 +521,11 @@ class ParentStudents(Base):
     )
 
     __table_args__ = (
+        # Окуучуга эки ата-эне байланса болот; бир эле жуп кайталанбайт.
         UniqueConstraint(
+            "parent_id",
             "student_id",
-            name="unique_student_parent"
+            name="unique_parent_student"
         ),
         CheckConstraint(
             "parent_id != student_id",

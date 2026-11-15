@@ -1,3 +1,4 @@
+import logging
 import os
 import jwt
 
@@ -15,6 +16,14 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
 
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY .env файлында көрсөтүлгөн эмес")
+
+# Кыска ачкыч менен токенди тандап табуу жеңилдейт (HS256 үчүн кеминде 32 байт).
+# Иштеп жаткан серверде ачкычты алмаштырууга болбойт: токендер жана убактылуу сыр сөздөр жараксыз болот,
+# ошондуктан бул жерде ката эмес, эскертүү гана чыгат. Жаңы серверде DEPLOY.md боюнча 48 байт коюңуз.
+if len(SECRET_KEY.encode()) < 32:
+    logging.getLogger(__name__).warning(
+        "SECRET_KEY өтө кыска (%s байт). Жаңы орнотууда кеминде 32 байт колдонуңуз", len(SECRET_KEY.encode())
+    )
 
 
 def create_access_token(data: dict) -> str:
