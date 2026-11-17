@@ -387,6 +387,12 @@ class SchoolAdminCreate(BaseModel):
         return value
 
 
+class SchoolAdminUpdate(BaseModel):
+    # ИНН (логин) өзгөрбөйт; аты-жөнү жана телефону гана
+    full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
+    phone: Optional[str] = Field(default=None, max_length=20)
+
+
 class SchoolAdminWithRole(SchoolAdminCreate):
     role: Literal["DIRECTOR", "DEPUTY"] = "DIRECTOR"
 

@@ -25,9 +25,14 @@ from mysite.db.models import (
     TeacherAssignments,
     Users,
 )
-from mysite.db.schema import AdminTeacherAssignmentCreate, SchoolAdminCreate, TeacherAssignmentOut
+from mysite.db.schema import (
+    AdminTeacherAssignmentCreate,
+    SchoolAdminCreate,
+    SchoolAdminUpdate,
+    TeacherAssignmentOut,
+)
 from mysite.security.permissions import require_roles
-from mysite.services.accounts import admin_row, create_school_admin
+from mysite.services.accounts import admin_row, create_school_admin, ensure_admin_limit
 from mysite.services.passwords import decrypt_temp_password, set_temp_password
 from mysite.services.school import (
     ADMIN_ROLES,
@@ -262,12 +267,8 @@ def create_deputy(
     return {**admin_row(user), "temporary_password": password}
 
 
-@router.delete("/deputies/{user_id}")
-def deactivate_deputy(
-    user_id: int,
-    db: Session = Depends(get_db),
-    current_user: Users = Depends(require_roles("DIRECTOR")),
-):
+def _own_deputy_or_404(db: Session, current_user: Users, user_id: int) -> Users:
+    """Директор өз мектебинин завучун гана көрөт жана өзгөртөт."""
     deputy = db.query(Users).filter(
         Users.id == user_id,
         Users.school_id == current_user.school_id,
@@ -275,6 +276,55 @@ def deactivate_deputy(
     ).first()
     if deputy is None:
         raise HTTPException(status_code=404, detail="Завуч табылган жок")
+    return deputy
+
+
+@router.put("/deputies/{user_id}")
+def update_deputy(
+    user_id: int,
+    data: SchoolAdminUpdate,
+    db: Session = Depends(get_db),
+    current_user: Users = Depends(require_roles("DIRECTOR")),
+):
+    deputy = _own_deputy_or_404(db, current_user, user_id)
+    update = data.model_dump(exclude_unset=True)
+    if not update:
+        raise HTTPException(status_code=400, detail="Өзгөртүү үчүн маалымат берилген жок")
+
+    if "full_name" in update:
+        if not update["full_name"] or not update["full_name"].strip():
+            raise HTTPException(status_code=400, detail="Аты-жөнү бош болбошу керек")
+        deputy.full_name = update["full_name"].strip()
+    if "phone" in update:
+        deputy.phone = (update["phone"] or "").strip() or None
+
+    db.commit()
+    db.refresh(deputy)
+    return admin_row(deputy)
+
+
+@router.post("/deputies/{user_id}/activate")
+def activate_deputy(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: Users = Depends(require_roles("DIRECTOR")),
+):
+    deputy = _own_deputy_or_404(db, current_user, user_id)
+    if not deputy.is_active:
+        # Кайра күйгүзүү да 5 завуч чегинен ашпашы керек
+        ensure_admin_limit(db, deputy.school_id, "DEPUTY")
+    deputy.is_active = True
+    db.commit()
+    return {"message": "Завуч кайра активдештирилди", "user_id": deputy.id}
+
+
+@router.delete("/deputies/{user_id}")
+def deactivate_deputy(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: Users = Depends(require_roles("DIRECTOR")),
+):
+    deputy = _own_deputy_or_404(db, current_user, user_id)
 
     deputy.is_active = False
     db.commit()

@@ -814,6 +814,22 @@ def test_system_admin(client, db):
     assert client.post("/admin/deputies", headers=d3, json={
         "inn": "90000000000329", "full_name": "Алтынчы Завуч"}).status_code == 201
     assert client.post(f"/system/users/{deputy_ids[-1]}/activate", headers=sa).status_code == 400
+    # Директор да 5 завуч толуп турганда өчүрүлгөндү кайра күйгүзө албайт
+    assert client.post(f"/admin/deputies/{deputy_ids[-1]}/activate", headers=d3).status_code == 400
+
+    # Директор өз завучунун аты-жөнүн жана телефонун өзгөртөт
+    r = client.put(f"/admin/deputies/{deputy_ids[1]}", headers=d3,
+                   json={"full_name": "Жаңы Аты Завуч", "phone": "+996700000001"})
+    assert r.status_code == 200, r.text
+    assert r.json()["full_name"] == "Жаңы Аты Завуч" and r.json()["phone"] == "+996700000001"
+    # Башка мектептин директору жана завучтун өзү өзгөртө албайт
+    assert client.put(f"/admin/deputies/{deputy_ids[1]}", headers=auth(S["director"]),
+                      json={"full_name": "Бөтөн"}).status_code == 404
+    assert client.put(f"/admin/deputies/{deputy_ids[1]}", headers=dep,
+                      json={"full_name": "Өзү"}).status_code == 403
+    # Бирин өчүрсө, мурда өчүрүлгөнүн кайра күйгүзсө болот
+    assert client.delete(f"/admin/deputies/{deputy_ids[1]}", headers=d3).status_code == 200
+    assert client.post(f"/admin/deputies/{deputy_ids[-1]}/activate", headers=d3).status_code == 200
 
     # Директорду өчүрүп, ордуна жаңысын дайындоо
     assert client.post(f"/system/users/{d3_id}/deactivate", headers=sa).status_code == 200
