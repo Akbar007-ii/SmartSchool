@@ -585,10 +585,12 @@ def test_teachers_and_subjects_crud(client):
     assert r.status_code == 200 and r.json()["is_active"] is True
 
     # Предметтер
-    r = client.post("/subjects/", headers=h, json={"name": "Тарых"})
+    # Тизмеде жок аталыш кабыл алынбайт
+    assert client.post("/subjects/", headers=h, json={"name": "Кандайдыр сабак"}).status_code == 422
+    r = client.post("/subjects/", headers=h, json={"name": "Дүйнөлүк тарых"})
     subject_id = r.json()["id"]
-    r = client.put(f"/subjects/{subject_id}", headers=h, json={"name": "Кыргыз тарыхы", "code": "HIST"})
-    assert r.status_code == 200 and r.json()["name"] == "Кыргыз тарыхы"
+    r = client.put(f"/subjects/{subject_id}", headers=h, json={"name": "Кыргызстан тарыхы", "code": "HIST"})
+    assert r.status_code == 200 and r.json()["name"] == "Кыргызстан тарыхы"
     r = client.put(f"/subjects/{subject_id}", headers=h, json={"name": "Кыргыз тили"})
     assert r.status_code == 400
     assert client.put(f"/subjects/{subject_id}", headers=auth(S["teacher"]), json={"code": "X"}).status_code == 403

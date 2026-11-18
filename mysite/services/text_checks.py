@@ -31,12 +31,10 @@ BLOCKED_WORDS = {"хер", "лох", "амың", "амыңды", "дурак", "
 BLOCKED_LATIN_ROOTS = ("fuck", "fck", "shit", "bitch", "cunt", "porn", "pussy", "whore", "nigg", "dick", "penis")
 BLOCKED_LATIN_WORDS = {"ass", "sex", "xxx", "cock", "fag", "slut", "boobs"}
 
-SUBJECT_CHARACTERS = re.compile(r"[^\W_]+|[\s().,-]")
 NAME_CHARACTERS = re.compile(r"[^\W\d_]+|[\s'ʼ’.-]")
 NOT_LETTERS = re.compile(r"[\W\d_]+")
 REPEATED_LETTER = re.compile(r"([^\W\d_])\1\1")
 
-INVALID_CHARS = "Тамгаларды, сандарды, боштукту жана дефисти колдонуңуз"
 NAME_CHARS = "Аты-жөнүндө тамгалар, боштук, дефис жана апостроф гана болот"
 CLASS_LETTER = "Тамга гана, мисалы А же Б"
 GIBBERISH = "Кокустан терилген тамгаларга окшош. Текшериңиз"
@@ -71,14 +69,25 @@ def _letter_count(text: str) -> int:
     return sum(1 for char in text if char.isalpha())
 
 
+# Сабактар тизмеден гана тандалат (frontend: smart-school/src/lib/subjectName.ts — тизмелер бирдей болушу керек).
+SUBJECT_CATALOG = {
+    "Кыргыз тили", "Кыргызский язык", "Кыргыз адабияты", "Кыргызская литература", "Орус тили",
+    "Русский язык", "Орус адабияты", "Русская литература", "Англис тили", "Английский язык",
+    "Немис тили", "Немецкий язык", "Француз тили", "Французский язык", "Сабат ачуу",
+    "Обучение грамоте", "Адабий окуу", "Литературное чтение", "Математика", "Алгебра", "Геометрия",
+    "Информатика", "Физика", "Химия", "Биология", "География", "Астрономия", "Мекен таануу",
+    "Родиноведение", "Табият таануу", "Природоведение", "Кыргызстан тарыхы", "История Кыргызстана",
+    "Дүйнөлүк тарых", "Всемирная история", "Адам жана коом", "Человек и общество", "Экономика",
+    "Этика", "Дене тарбия", "Физическая культура", "Музыка", "Сүрөт искусствосу",
+    "Изобразительное искусство", "Технология", "Чийме", "Черчение", "Аскерге чейинки даярдык",
+    "Допризывная подготовка", "Робототехника", "Шахмат", "Шахматы",
+}
+
+
 def validate_subject_name(name: str) -> str:
-    """Туура аталышты кайтарат, болбосо ValueError (ката текстин колдонуучу көрөт)."""
-    name = name.strip()
-    if not _only(SUBJECT_CHARACTERS, name) or _letter_count(name) < 2:
-        raise ValueError(INVALID_CHARS)
-    if REPEATED_LETTER.search(name.lower()):
-        raise ValueError(GIBBERISH)
-    if has_inappropriate_words(name):
+    """Тизмедеги аталышты кайтарат, болбосо ValueError."""
+    name = " ".join(name.split())
+    if name not in SUBJECT_CATALOG:
         raise ValueError(SUBJECT_INAPPROPRIATE)
     return name
 
