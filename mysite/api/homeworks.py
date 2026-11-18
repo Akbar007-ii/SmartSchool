@@ -23,6 +23,7 @@ from mysite.db.models import (
 from mysite.security.permissions import get_current_user, require_roles
 from mysite.services.files import delete_media, is_image_url, save_upload
 from mysite.services.notifications import notify
+from mysite.services.text_checks import check_form_texts
 from mysite.services.school import (
     ADMIN_ROLES,
     TEACHER_ROLES,
@@ -140,6 +141,7 @@ def create_homework(
     current_user: Users = Depends(require_roles(*TEACHER_ROLES)),
     db: Session = Depends(get_db),
 ):
+    check_form_texts(title=title, description=description)
     assignment = get_assignment_or_404(db, assignment_id, current_user.school_id)
     if assignment.teacher_id != current_user.id:
         raise HTTPException(status_code=403, detail="Сиз бул сабакка бекитилген эмессиз")
@@ -292,6 +294,7 @@ def update_homework(
     current_user: Users = Depends(require_roles(*TEACHER_ROLES)),
     db: Session = Depends(get_db),
 ):
+    check_form_texts(title=title, description=description)
     hw = get_homework_or_404(db, homework_id, current_user.school_id)
     ensure_owner(current_user, hw)
 
@@ -385,6 +388,7 @@ def submit_homework(
     current_user: Users = Depends(require_roles("STUDENT")),
     db: Session = Depends(get_db),
 ):
+    check_form_texts(text=text)
     hw = get_homework_or_404(db, homework_id, current_user.school_id)
     if not can_view_homework(db, current_user, hw):
         raise HTTPException(status_code=403, detail="Бул тапшырма сиздин класска эмес")

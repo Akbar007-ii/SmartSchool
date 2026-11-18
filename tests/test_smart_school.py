@@ -797,9 +797,9 @@ def test_system_admin(client, db):
     assert r.status_code == 400
 
     deputy_ids = [deputy_id]
-    for index in range(4):
+    for index, surname in enumerate(["Экинчи", "Үчүнчү", "Төртүнчү", "Бешинчи"]):
         r = client.post("/admin/deputies", headers=d3, json={
-            "inn": f"9000000000032{index}", "full_name": f"Завуч Номер {index + 2}"})
+            "inn": f"9000000000032{index}", "full_name": f"{surname} Завуч"})
         assert r.status_code == 201, r.text
         deputy_ids.append(r.json()["id"])
 

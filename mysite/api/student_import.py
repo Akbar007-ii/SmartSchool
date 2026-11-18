@@ -22,6 +22,7 @@ from mysite.db.models import (
 from mysite.security.permissions import require_roles
 from mysite.security.hashing import hash_password
 from mysite.services.passwords import encrypt_temp_password, set_temp_password
+from mysite.services.text_checks import validate_person_name
 
 
 router = APIRouter(
@@ -144,6 +145,12 @@ def import_students_excel(
                     "row": row_number,
                     "error": "Окуучунун аты-жөнү туура эмес"
                 })
+                continue
+
+            try:
+                full_name = validate_person_name(str(full_name))
+            except ValueError as error:
+                errors.append({"row": row_number, "error": str(error)})
                 continue
 
             existing = db.query(Users).filter(

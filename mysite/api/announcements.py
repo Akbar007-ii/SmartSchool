@@ -10,6 +10,7 @@ from mysite.db.models import Announcements, Users
 from mysite.security.permissions import get_current_user, require_roles
 from mysite.services.files import IMAGE_EXTENSIONS, delete_media, save_upload
 from mysite.services.school import ADMIN_ROLES
+from mysite.services.text_checks import check_form_texts
 
 router = APIRouter(prefix="/announcements", tags=["Announcements"])
 
@@ -74,6 +75,7 @@ def create_announcement(
     current_user: Users = Depends(require_roles(*ADMIN_ROLES)),
     db: Session = Depends(get_db),
 ):
+    check_form_texts(title=title, body=body)
     image_url = None
     if image is not None and image.filename:
         image_url = save_upload(
@@ -104,6 +106,7 @@ def update_announcement(
     current_user: Users = Depends(require_roles(*ADMIN_ROLES)),
     db: Session = Depends(get_db),
 ):
+    check_form_texts(title=title, body=body)
     item = get_or_404(db, announcement_id, current_user.school_id)
 
     if title is not None:

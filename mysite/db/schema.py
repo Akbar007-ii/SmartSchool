@@ -5,6 +5,13 @@ from typing import Optional, List, Literal
 
 from pydantic import (BaseModel,ConfigDict,Field,field_validator,)
 
+from mysite.services.text_checks import (
+    validate_class_letter,
+    validate_free_text,
+    validate_person_name,
+    validate_subject_name,
+)
+
 class UserRole(str, Enum):
     DIRECTOR = "DIRECTOR"
     DEPUTY = "DEPUTY"
@@ -25,6 +32,16 @@ class SchoolCreate(BaseModel):
     banner_url: Optional[str] = None
     director_name: Optional[str] = None
 
+    @field_validator("name", "address")
+    @classmethod
+    def check_names(cls, value):
+        return value if value is None else validate_free_text(value)
+
+    @field_validator("director_name")
+    @classmethod
+    def check_director_name(cls, value):
+        return value if value is None else validate_person_name(value)
+
 
 class SchoolUpdate(BaseModel):
     name: Optional[str] = Field(
@@ -38,6 +55,16 @@ class SchoolUpdate(BaseModel):
     logo_url: Optional[str] = None
     banner_url: Optional[str] = None
     director_name: Optional[str] = None
+
+    @field_validator("name", "address")
+    @classmethod
+    def check_names(cls, value):
+        return value if value is None else validate_free_text(value)
+
+    @field_validator("director_name")
+    @classmethod
+    def check_director_name(cls, value):
+        return value if value is None else validate_person_name(value)
 
 
 class SchoolOut(BaseSchema):
@@ -59,6 +86,11 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=8)
     phone: Optional[str] = None
     school_id: int
+
+    @field_validator("full_name")
+    @classmethod
+    def check_full_name(cls, value):
+        return value if value is None else validate_person_name(value)
 
     @field_validator("inn")
     @classmethod
@@ -85,6 +117,11 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
+
+    @field_validator("full_name")
+    @classmethod
+    def check_full_name(cls, value):
+        return value if value is None else validate_person_name(value)
     is_active: Optional[bool] = None
 
 class LoginRequest(BaseModel):
@@ -117,6 +154,11 @@ class ClassCreate(BaseModel):
     class_teacher_id: Optional[int] = None
     academic_year: str
 
+    @field_validator("letter")
+    @classmethod
+    def check_letter(cls, value):
+        return value if value is None else validate_class_letter(value)
+
 
 
 class ClassOut(BaseSchema):
@@ -132,6 +174,11 @@ class ClassOut(BaseSchema):
 class SubjectCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     code: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def check_name(cls, value):
+        return validate_subject_name(value)
 
 
 
@@ -165,6 +212,11 @@ class TeacherCreate(BaseModel):
     full_name: str = Field(min_length=3, max_length=200)
     phone: Optional[str] = None
 
+    @field_validator("full_name")
+    @classmethod
+    def check_full_name(cls, value):
+        return value if value is None else validate_person_name(value)
+
     @field_validator("inn")
     @classmethod
     def validate_inn(cls, value):
@@ -185,6 +237,11 @@ class StudentCreate(BaseModel):
     inn: str = Field(min_length=14, max_length=14)
     full_name: str = Field(min_length=3, max_length=200)
     phone: Optional[str] = None
+
+    @field_validator("full_name")
+    @classmethod
+    def check_full_name(cls, value):
+        return value if value is None else validate_person_name(value)
     class_id: int
 
     @field_validator("inn")
@@ -219,6 +276,11 @@ class StudentUpdate(BaseModel):
         max_length=20
     )
 
+    @field_validator("full_name")
+    @classmethod
+    def check_full_name(cls, value):
+        return value if value is None else validate_person_name(value)
+
 
 
 class ParentRegister(BaseModel):
@@ -226,6 +288,11 @@ class ParentRegister(BaseModel):
     full_name: str = Field(min_length=3, max_length=200)
     phone: Optional[str] = Field(default=None, max_length=20)
     password: str = Field(min_length=8)
+
+    @field_validator("full_name")
+    @classmethod
+    def check_full_name(cls, value):
+        return value if value is None else validate_person_name(value)
 
     student_inn: str = Field(min_length=14, max_length=14)
     student_password: str = Field(min_length=1)
@@ -283,6 +350,11 @@ class JournalEntryIn(BaseModel):
     attendance: Optional[AttendanceCode] = None
     comment: Optional[str] = Field(default=None, max_length=500)
 
+    @field_validator("comment")
+    @classmethod
+    def check_comment(cls, value):
+        return value if value is None else validate_free_text(value)
+
 
 class JournalSave(BaseModel):
     assignment_id: int
@@ -302,9 +374,19 @@ class AbsenceRequestCreate(BaseModel):
     reason: str = Field(min_length=2, max_length=100)
     comment: Optional[str] = Field(default=None, max_length=1000)
 
+    @field_validator("reason", "comment")
+    @classmethod
+    def check_text(cls, value):
+        return value if value is None else validate_free_text(value)
+
 
 class AbsenceReview(BaseModel):
     comment: Optional[str] = Field(default=None, max_length=500)
+
+    @field_validator("comment")
+    @classmethod
+    def check_comment(cls, value):
+        return value if value is None else validate_free_text(value)
 
 
 # =====================================================
@@ -315,6 +397,11 @@ class OlympiadCandidateCreate(BaseModel):
     subject_id: int
     student_id: int
     note: Optional[str] = Field(default=None, max_length=500)
+
+    @field_validator("note")
+    @classmethod
+    def check_note(cls, value):
+        return value if value is None else validate_free_text(value)
 
 
 class OlympiadAutoSelect(BaseModel):
@@ -331,6 +418,11 @@ class ProfileUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
     phone: Optional[str] = Field(default=None, max_length=20)
 
+    @field_validator("full_name")
+    @classmethod
+    def check_full_name(cls, value):
+        return value if value is None else validate_person_name(value)
+
 
 class PasswordChange(BaseModel):
     current_password: str = Field(min_length=1)
@@ -344,6 +436,11 @@ class PasswordChange(BaseModel):
 class TeacherUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
     phone: Optional[str] = Field(default=None, max_length=20)
+
+    @field_validator("full_name")
+    @classmethod
+    def check_full_name(cls, value):
+        return value if value is None else validate_person_name(value)
 
 
 # =====================================================
@@ -360,6 +457,11 @@ class ScheduleLessonCreate(BaseModel):
     end_time: Optional[time] = None
     room: Optional[str] = Field(default=None, max_length=50)
 
+    @field_validator("room")
+    @classmethod
+    def check_room(cls, value):
+        return value if value is None else validate_free_text(value)
+
 
 class ScheduleLessonUpdate(BaseModel):
     assignment_id: Optional[int] = None
@@ -368,6 +470,11 @@ class ScheduleLessonUpdate(BaseModel):
     start_time: Optional[time] = None
     end_time: Optional[time] = None
     room: Optional[str] = Field(default=None, max_length=50)
+
+    @field_validator("room")
+    @classmethod
+    def check_room(cls, value):
+        return value if value is None else validate_free_text(value)
 
 
 # =====================================================
@@ -378,6 +485,11 @@ class SchoolAdminCreate(BaseModel):
     inn: str = Field(min_length=14, max_length=14)
     full_name: str = Field(min_length=3, max_length=200)
     phone: Optional[str] = Field(default=None, max_length=20)
+
+    @field_validator("full_name")
+    @classmethod
+    def check_full_name(cls, value):
+        return value if value is None else validate_person_name(value)
 
     @field_validator("inn")
     @classmethod
@@ -392,6 +504,11 @@ class SchoolAdminUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
     phone: Optional[str] = Field(default=None, max_length=20)
 
+    @field_validator("full_name")
+    @classmethod
+    def check_full_name(cls, value):
+        return value if value is None else validate_person_name(value)
+
 
 class SchoolAdminWithRole(SchoolAdminCreate):
     role: Literal["DIRECTOR", "DEPUTY"] = "DIRECTOR"
@@ -405,3 +522,8 @@ class SystemSchoolCreate(SchoolCreate):
 class SubjectUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=100)
     code: Optional[str] = Field(default=None, max_length=30)
+
+    @field_validator("name")
+    @classmethod
+    def check_name(cls, value):
+        return value if value is None else validate_subject_name(value)

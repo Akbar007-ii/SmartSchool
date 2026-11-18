@@ -29,6 +29,7 @@ from mysite.security.permissions import (
 )
 from mysite.security.hashing import hash_password
 from mysite.services.passwords import encrypt_temp_password, set_temp_password
+from mysite.services.text_checks import validate_person_name
 
 
 router = APIRouter(
@@ -180,6 +181,12 @@ async def import_teachers_excel(
                 "row": row_number,
                 "error": "Аты-жөнү туура эмес"
             })
+            continue
+
+        try:
+            full_name = validate_person_name(full_name)
+        except ValueError as error:
+            errors.append({"row": row_number, "error": str(error)})
             continue
 
         # Мурда кошулганбы?
