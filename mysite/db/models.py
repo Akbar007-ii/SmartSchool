@@ -598,6 +598,59 @@ class JournalEntries(Base):
 
 
 # =====================================================
+# 8a. PERIOD GRADES — чейректик жана жылдык баалар
+# =====================================================
+# Мугалим чейректин орточо баасын көрүп, жыйынтык бааны өзү коёт.
+# period: Q1–Q4 (чейректер) же YEAR (жылдык баа).
+
+class PeriodGrades(Base):
+    __tablename__ = "period_grades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    assignment_id: Mapped[int] = mapped_column(
+        ForeignKey("teacher_assignments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), nullable=False, index=True
+    )
+
+    school_id: Mapped[int] = mapped_column(
+        ForeignKey("schools.id"), nullable=False, index=True
+    )
+
+    period: Mapped[str] = mapped_column(String(4), nullable=False)
+
+    grade_value: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    updated_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    assignment: Mapped["TeacherAssignments"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint(
+            "assignment_id", "student_id", "period",
+            name="unique_period_grade"
+        ),
+        CheckConstraint(
+            "grade_value >= 2 AND grade_value <= 5",
+            name="check_period_grade_value"
+        ),
+        CheckConstraint(
+            "period IN ('Q1', 'Q2', 'Q3', 'Q4', 'YEAR')",
+            name="check_period_grade_period"
+        ),
+    )
+
+
+# =====================================================
 # 9. SUBJECT XP — предметтик рейтинг
 # =====================================================
 

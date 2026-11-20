@@ -18,12 +18,14 @@ from mysite.db.models import (
     AbsenceRequests,
     Classes,
     JournalEntries,
+    PeriodGrades,
+    ScheduleLessons,
     StudentEnrollments,
     Subjects,
     TeacherAssignments,
     Users,
 )
-from mysite.db.schema import JournalSave
+from mysite.db.schema import JournalSave, PeriodGradesSave
 from mysite.security.permissions import get_current_user, require_roles
 from mysite.services.rating import entry_xp, recompute_subject_xp, sync_badges
 from mysite.services.school import (
@@ -31,6 +33,7 @@ from mysite.services.school import (
     STAFF_ROLES,
     TEACHER_ROLES,
     class_name,
+    get_active_enrollment,
     get_assignment_or_404,
     get_class_or_404,
     is_class_teacher_of,
@@ -409,6 +412,21 @@ def get_summary(
         ]
         result.append(s)
 
+    # Чейректик жана жылдык жыйынтык баалар — окуучунун акыркы окуу жылы боюнча
+    period_rows = (
+        db.query(PeriodGrades, TeacherAssignments)
+        .join(TeacherAssignments, TeacherAssignments.id == PeriodGrades.assignment_id)
+        .filter(PeriodGrades.student_id == student.id)
+        .all()
+    )
+    latest_year = max((a.academic_year for _, a in period_rows), default=None)
+    period_by_subject = defaultdict(dict)
+    for grade, assignment in period_rows:
+        if assignment.academic_year == latest_year:
+            period_by_subject[assignment.subject_id][grade.period] = grade.grade_value
+    for s in result:
+        s["period_grades"] = period_by_subject.get(s["subject_id"], {})
+
     result.sort(key=lambda x: x["subject_name"])
 
     all_grades = [
@@ -479,3 +497,308 @@ def get_class_day(
             for i, s in enumerate(students, start=1)
         ],
     }
+
+
+# =====================================================
+# 7. Бир айлык табель (класс + предмет)
+# =====================================================
+
+def average_of(grades: list[int]) -> Optional[float]:
+    return round(sum(grades) / len(grades), 2) if grades else None
+
+
+def month_range(month: Optional[str]) -> tuple[date, date]:
+    """'2026-11' → (2026-11-01, 2026-11-30). Берилбесе — учурдагы ай."""
+    try:
+        year_number, month_number = (int(part) for part in (month or today_local().strftime("%Y-%m")).split("-"))
+        first_day = date(year_number, month_number, 1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Ай YYYY-MM форматында болушу керек")
+    next_month = date(first_day.year + first_day.month // 12, first_day.month % 12 + 1, 1)
+    return first_day, next_month - timedelta(days=1)
+
+
+def month_cell(entry: JournalEntries) -> dict:
+    return {
+        "date": entry.date,
+        "entry_id": entry.id,
+        "grade_value": entry.grade_value,
+        "attendance": entry.attendance,
+        "comment": entry.comment,
+    }
+
+
+@router.get("/month")
+def get_journal_month(
+    assignment_id: int,
+    month: Optional[str] = None,
+    current_user: Users = Depends(require_roles(*STAFF_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Табель: окуучулар × айдын күндөрү. Клетка — баа жана катышуу белгиси."""
+    first_day, last_day = month_range(month)
+
+    assignment = get_assignment_or_404(db, assignment_id, current_user.school_id)
+    ensure_can_view_assignment(db, current_user, assignment)
+
+    students = class_students(db, assignment.school_class)
+    entries = db.query(JournalEntries).filter(
+        JournalEntries.assignment_id == assignment.id,
+        JournalEntries.date >= first_day,
+        JournalEntries.date <= last_day,
+    ).all()
+    excused = {
+        (r.student_id, r.target_date)
+        for r in db.query(AbsenceRequests.student_id, AbsenceRequests.target_date).filter(
+            AbsenceRequests.class_id == assignment.class_id,
+            AbsenceRequests.target_date >= first_day,
+            AbsenceRequests.target_date <= last_day,
+            AbsenceRequests.status == "APPROVED",
+        )
+    }
+    # Жадыбал боюнча бул сабак өтүүчү апта күндөрү (1 — дүйшөмбү)
+    lesson_weekdays = sorted({
+        weekday for (weekday,) in db.query(ScheduleLessons.weekday).filter(
+            ScheduleLessons.assignment_id == assignment.id
+        )
+    })
+
+    cells_by_student = defaultdict(list)
+    for entry in entries:
+        cells_by_student[entry.student_id].append(entry)
+
+    rows = []
+    for number, student in enumerate(students, start=1):
+        student_entries = sorted(cells_by_student.get(student.id, []), key=lambda e: e.date)
+        cells = [month_cell(e) for e in student_entries]
+        entry_dates = {e.date for e in student_entries}
+        # Сурануу бекитилген, бирок мугалим али журналга жазбаган күндөр
+        for student_id, day in excused:
+            if student_id == student.id and day not in entry_dates:
+                cells.append({
+                    "date": day, "entry_id": None, "grade_value": None,
+                    "attendance": "С", "comment": None,
+                })
+        cells.sort(key=lambda c: c["date"])
+        grades = [e.grade_value for e in student_entries if e.grade_value is not None]
+        rows.append({
+            "number": number,
+            "student_id": student.id,
+            "full_name": student.full_name,
+            "cells": cells,
+            "average": average_of(grades),
+            "grades_count": len(grades),
+            "absent_count": sum(1 for c in cells if c["attendance"] in ("Ж", "С")),
+        })
+
+    return {
+        "assignment": serialize_assignment(assignment),
+        "month": first_day.strftime("%Y-%m"),
+        "date_from": first_day,
+        "date_to": last_day,
+        "can_edit": assignment.teacher_id == current_user.id,
+        "lesson_weekdays": lesson_weekdays,
+        "students": rows,
+    }
+
+
+# =====================================================
+# 7б. Окуучунун айлык табели (окуучу / ата-эне)
+# =====================================================
+
+@router.get("/my-month")
+def get_student_month(
+    student_id: Optional[int] = None,
+    month: Optional[str] = None,
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Окуучунун табели: сабактар × айдын күндөрү."""
+    student = resolve_student_for_viewer(db, current_user, student_id)
+    first_day, last_day = month_range(month)
+
+    # Сабак тизмеси: учурдагы класстын бардык сабактары + ушул айда баасы бар сабактар
+    subjects = {}
+    _, school_class = get_active_enrollment(db, student.id)
+    if school_class is not None:
+        for assignment in db.query(TeacherAssignments).filter(
+            TeacherAssignments.class_id == school_class.id,
+            TeacherAssignments.academic_year == school_class.academic_year,
+        ):
+            if assignment.subject is not None:
+                subjects[assignment.subject_id] = assignment.subject.name
+
+    cells_by_subject = defaultdict(list)
+    for entry, _, subject, _ in _entries_for_student(db, student.id, first_day, last_day):
+        subjects[subject.id] = subject.name
+        cells_by_subject[subject.id].append(entry)
+
+    rows = []
+    for number, (subject_id, subject_name) in enumerate(sorted(subjects.items(), key=lambda item: item[1]), start=1):
+        entries = sorted(cells_by_subject.get(subject_id, []), key=lambda e: e.date)
+        grades = [e.grade_value for e in entries if e.grade_value is not None]
+        rows.append({
+            "number": number,
+            "subject_id": subject_id,
+            "subject_name": subject_name,
+            "cells": [month_cell(e) for e in entries],
+            "average": average_of(grades),
+            "grades_count": len(grades),
+            "absent_count": sum(1 for e in entries if e.attendance in ("Ж", "С")),
+        })
+
+    return {
+        "student_id": student.id,
+        "full_name": student.full_name,
+        "month": first_day.strftime("%Y-%m"),
+        "date_from": first_day,
+        "date_to": last_day,
+        "rows": rows,
+    }
+
+
+# =====================================================
+# 8. Чейректик жана жылдык баалар
+# =====================================================
+
+def academic_quarters(academic_year: str) -> list[dict]:
+    """Окуу жылынын чейректери.
+
+    Чейректин чеги мектептен мектепке бир аз айырмаланат, ошондуктан ай боюнча
+    тегеректелет: эс алуу күндөрүндөгү баа кийинки чейрекке кошулат.
+    """
+    try:
+        start_year = int(academic_year.split("-")[0])
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Окуу жылы туура эмес")
+    return [
+        {"key": "Q1", "start": date(start_year, 9, 1), "end": date(start_year, 10, 31)},
+        {"key": "Q2", "start": date(start_year, 11, 1), "end": date(start_year, 12, 31)},
+        {"key": "Q3", "start": date(start_year + 1, 1, 1), "end": date(start_year + 1, 3, 31)},
+        {"key": "Q4", "start": date(start_year + 1, 4, 1), "end": date(start_year + 1, 8, 31)},
+    ]
+
+
+@router.get("/periods")
+def get_period_grades(
+    assignment_id: int,
+    current_user: Users = Depends(require_roles(*STAFF_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Ар бир окуучунун чейрек боюнча орточо баасы жана мугалим койгон жыйынтык баа."""
+    assignment = get_assignment_or_404(db, assignment_id, current_user.school_id)
+    ensure_can_view_assignment(db, current_user, assignment)
+
+    quarters = academic_quarters(assignment.academic_year)
+    students = class_students(db, assignment.school_class)
+    entries = db.query(JournalEntries.student_id, JournalEntries.date, JournalEntries.grade_value).filter(
+        JournalEntries.assignment_id == assignment.id,
+        JournalEntries.date >= quarters[0]["start"],
+        JournalEntries.date <= quarters[-1]["end"],
+        JournalEntries.grade_value.isnot(None),
+    ).all()
+    finals = {
+        (g.student_id, g.period): g.grade_value
+        for g in db.query(PeriodGrades).filter(PeriodGrades.assignment_id == assignment.id)
+    }
+
+    grades_by_quarter = defaultdict(list)
+    for student_id, day, grade_value in entries:
+        for quarter in quarters:
+            if quarter["start"] <= day <= quarter["end"]:
+                grades_by_quarter[(student_id, quarter["key"])].append(grade_value)
+
+    rows = []
+    for number, student in enumerate(students, start=1):
+        grades = {}
+        for quarter in quarters:
+            values = grades_by_quarter.get((student.id, quarter["key"]), [])
+            grades[quarter["key"]] = {
+                "average": average_of(values),
+                "grades_count": len(values),
+                "final": finals.get((student.id, quarter["key"])),
+            }
+        # Жылдык баанын сунушу — чейректик жыйынтык баалардын орточосу
+        quarter_finals = [g["final"] for g in grades.values() if g["final"] is not None]
+        grades["YEAR"] = {
+            "average": average_of(quarter_finals),
+            "grades_count": len(quarter_finals),
+            "final": finals.get((student.id, "YEAR")),
+        }
+        rows.append({
+            "number": number,
+            "student_id": student.id,
+            "full_name": student.full_name,
+            "grades": grades,
+        })
+
+    today = today_local()
+    current = next((q["key"] for q in quarters if q["start"] <= today <= q["end"]), None)
+
+    return {
+        "assignment": serialize_assignment(assignment),
+        "academic_year": assignment.academic_year,
+        "can_edit": assignment.teacher_id == current_user.id,
+        "current_period": current,
+        "periods": quarters,
+        "students": rows,
+    }
+
+
+@router.put("/periods")
+def save_period_grades(
+    data: PeriodGradesSave,
+    current_user: Users = Depends(require_roles(*TEACHER_ROLES)),
+    db: Session = Depends(get_db),
+):
+    assignment = get_assignment_or_404(db, data.assignment_id, current_user.school_id)
+    if assignment.teacher_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Сиз бул класстын бул сабагына бекитилген эмессиз")
+
+    quarters = academic_quarters(assignment.academic_year)
+    starts = {q["key"]: q["start"] for q in quarters}
+    # Жылдык баа 4-чейрек башталганда коюлат
+    period_start = starts.get(data.period, starts["Q4"])
+    if period_start > today_local():
+        raise HTTPException(status_code=400, detail="Бул чейрек али башталган жок")
+
+    allowed_ids = {s.id for s in class_students(db, assignment.school_class)}
+    seen = set()
+    for item in data.entries:
+        if item.student_id in seen:
+            raise HTTPException(status_code=400, detail="Бир окуучу эки жолу берилди")
+        seen.add(item.student_id)
+        if item.student_id not in allowed_ids:
+            raise HTTPException(status_code=400, detail=f"Окуучу (id={item.student_id}) бул класста окубайт")
+
+    existing = {
+        g.student_id: g
+        for g in db.query(PeriodGrades).filter(
+            PeriodGrades.assignment_id == assignment.id,
+            PeriodGrades.period == data.period,
+            PeriodGrades.student_id.in_(seen),
+        )
+    }
+
+    saved, deleted = 0, 0
+    for item in data.entries:
+        grade = existing.get(item.student_id)
+        if item.grade_value is None:
+            if grade is not None:
+                db.delete(grade)
+                deleted += 1
+            continue
+        if grade is None:
+            grade = PeriodGrades(
+                assignment_id=assignment.id,
+                student_id=item.student_id,
+                school_id=assignment.school_id,
+                period=data.period,
+            )
+            db.add(grade)
+        grade.grade_value = item.grade_value
+        grade.updated_by = current_user.id
+        saved += 1
+
+    db.commit()
+    return {"message": "Жыйынтык баалар сакталды", "saved": saved, "deleted": deleted}

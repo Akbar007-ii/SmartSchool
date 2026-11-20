@@ -362,6 +362,22 @@ class JournalSave(BaseModel):
     entries: List[JournalEntryIn] = Field(min_length=1)
 
 
+# Чейректер (Q1–Q4) жана жылдык баа (YEAR)
+PeriodCode = Literal["Q1", "Q2", "Q3", "Q4", "YEAR"]
+
+
+class PeriodGradeIn(BaseModel):
+    student_id: int
+    # null — жыйынтык бааны өчүрүү
+    grade_value: Optional[int] = Field(default=None, ge=2, le=5)
+
+
+class PeriodGradesSave(BaseModel):
+    assignment_id: int
+    period: PeriodCode
+    entries: List[PeriodGradeIn] = Field(min_length=1)
+
+
 # =====================================================
 # Сабактан сурануу (ата-эне гана жөнөтөт)
 # =====================================================

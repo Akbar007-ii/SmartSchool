@@ -323,6 +323,72 @@ def test_journal_rbac_and_xp(client, freeze_time):
     assert r.status_code == 200 and r.json()["overall_average"] == 4
 
 
+def test_journal_month_periods_and_performance(client, freeze_time):
+    frozen = freeze_time(10, 0)
+    today = str(frozen.date())
+    month = today[:7]
+
+    # Айлык табель: директор көрөт, бирок баа коё албайт; окуучуга жабык
+    r = client.get(f"/journal/month?assignment_id={S['assignment']}&month={month}", headers=auth(S["director"]))
+    assert r.status_code == 200, r.text
+    assert r.json()["can_edit"] is False
+    erkin = next(row for row in r.json()["students"] if row["student_id"] == S["erkin_id"])
+    assert any(c["date"] == today and c["grade_value"] == 5 for c in erkin["cells"])
+    assert erkin["average"] == 5
+    r = client.get(f"/journal/month?assignment_id={S['assignment']}&month=2026-13", headers=auth(S["teacher"]))
+    assert r.status_code == 400
+    r = client.get(f"/journal/month?assignment_id={S['assignment']}", headers=auth(S["erkin"]))
+    assert r.status_code == 403
+
+    # Чейрек: орточо баа эсептелет, жыйынтык бааны сабактын мугалими гана коёт
+    r = client.get(f"/journal/periods?assignment_id={S['assignment']}", headers=auth(S["teacher"]))
+    assert r.status_code == 200, r.text
+    current = r.json()["current_period"]
+    assert current is not None
+    erkin = next(row for row in r.json()["students"] if row["student_id"] == S["erkin_id"])
+    assert erkin["grades"][current]["average"] == 5
+
+    payload = {"assignment_id": S["assignment"], "period": current,
+               "entries": [{"student_id": S["erkin_id"], "grade_value": 5}]}
+    for token in (S["teacher2"], S["director"], S["erkin"]):
+        assert client.put("/journal/periods", headers=auth(token), json=payload).status_code == 403
+    r = client.put("/journal/periods", headers=auth(S["teacher"]), json=payload)
+    assert r.status_code == 200 and r.json()["saved"] == 1, r.text
+
+    r = client.get(f"/journal/periods?assignment_id={S['assignment']}", headers=auth(S["teacher"]))
+    erkin = next(row for row in r.json()["students"] if row["student_id"] == S["erkin_id"])
+    assert erkin["grades"][current]["final"] == 5 and erkin["grades"]["YEAR"]["average"] == 5
+
+    r = client.get("/journal/summary", headers=auth(S["erkin"]))
+    assert any(subject["period_grades"].get(current) == 5 for subject in r.json()["subjects"])
+
+    payload["entries"][0]["grade_value"] = None
+    r = client.put("/journal/periods", headers=auth(S["teacher"]), json=payload)
+    assert r.status_code == 200 and r.json()["deleted"] == 1
+
+    # Окуучунун айлык табели: өзү жана ата-энеси көрөт, башка окуучу көрө албайт
+    r = client.get(f"/journal/my-month?month={month}", headers=auth(S["erkin"]))
+    assert r.status_code == 200, r.text
+    assert any(
+        cell["date"] == today and cell["grade_value"] == 5
+        for row in r.json()["rows"] for cell in row["cells"]
+    )
+    r = client.get(f"/journal/my-month?student_id={S['bekzat_id']}&month={month}", headers=auth(S["parent"]))
+    assert r.status_code == 200, r.text
+    r = client.get(f"/journal/my-month?student_id={S['bekzat_id']}", headers=auth(S["erkin"]))
+    assert r.status_code == 403
+
+    # Башкы панелдин графиги: бүгүн 5, 4, 2 → орточо 3.67 → 73%, катышуу 100%
+    r = client.get("/dashboard/performance?period=week", headers=auth(S["director"]))
+    assert r.status_code == 200, r.text
+    points = r.json()["points"]
+    assert len(points) == 7 and points[-1]["date"] == today
+    assert points[-1]["percent"] == 73 and points[-1]["attendance_percent"] == 100
+    r = client.get("/dashboard/performance?period=year", headers=auth(S["director"]))
+    assert len(r.json()["points"]) == 12
+    assert client.get("/dashboard/performance", headers=auth(S["teacher"])).status_code == 403
+
+
 def test_approve_marks_excused(client, freeze_time):
     frozen = freeze_time(10, 30)
     today = str(frozen.date())

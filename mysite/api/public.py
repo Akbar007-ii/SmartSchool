@@ -1,15 +1,17 @@
 """Ачык портал (авторизациясыз): мектептердин визиттик карточкалары жана статистика."""
-from typing import Optional
+from datetime import date, timedelta
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from mysite.db.database import get_db
-from mysite.db.models import Announcements, Classes, Schools, Users
-from mysite.security.permissions import get_current_user
+from mysite.db.models import Announcements, Classes, JournalEntries, Schools, Users
+from mysite.security.permissions import get_current_user, require_roles
 from mysite.db.models import OlympiadCandidates
-from mysite.services.school import TEACHER_ROLES
+from mysite.services.school import ADMIN_ROLES, TEACHER_ROLES
+from mysite.services.timeutils import today_local
 
 router = APIRouter(tags=["Portal"])
 
@@ -122,3 +124,73 @@ def dashboard_stats(
             OlympiadCandidates.status == "SELECTED",
         ).scalar() or 0,
     }
+
+
+# Башкы панелдин графиги: мектептин үлгүрүүсү (орточо баа пайыз менен) жана катышуу.
+# week — акыркы 7 күн, month — акыркы 30 күн (күн боюнча), year — акыркы 12 ай (ай боюнча).
+@router.get("/dashboard/performance")
+def dashboard_performance(
+    period: Literal["week", "month", "year"] = "week",
+    current_user: Users = Depends(require_roles(*ADMIN_ROLES)),
+    db: Session = Depends(get_db),
+):
+    today = today_local()
+    if period == "year":
+        month_index = today.year * 12 + today.month - 1 - 11
+        date_from = date(month_index // 12, month_index % 12 + 1, 1)
+    else:
+        date_from = today - timedelta(days=(6 if period == "week" else 29))
+
+    present = case((JournalEntries.attendance.in_(["Б", "К"]), 1), else_=0)
+    rows = (
+        db.query(
+            JournalEntries.date,
+            func.sum(JournalEntries.grade_value),
+            func.count(JournalEntries.grade_value),
+            func.sum(present),
+            func.count(JournalEntries.attendance),
+        )
+        .filter(
+            JournalEntries.school_id == current_user.school_id,
+            JournalEntries.date >= date_from,
+            JournalEntries.date <= today,
+        )
+        .group_by(JournalEntries.date)
+        .all()
+    )
+
+    def bucket_key(day: date) -> date:
+        return day.replace(day=1) if period == "year" else day
+
+    totals = {}
+    for day, grade_sum, grade_count, present_count, attendance_count in rows:
+        bucket = totals.setdefault(bucket_key(day), [0, 0, 0, 0])
+        bucket[0] += grade_sum or 0
+        bucket[1] += grade_count or 0
+        bucket[2] += present_count or 0
+        bucket[3] += attendance_count or 0
+
+    keys = []
+    if period == "year":
+        for offset in range(12):
+            month_index = date_from.year * 12 + date_from.month - 1 + offset
+            keys.append(date(month_index // 12, month_index % 12 + 1, 1))
+    else:
+        keys = [date_from + timedelta(days=offset) for offset in range((today - date_from).days + 1)]
+
+    points = []
+    for key in keys:
+        grade_sum, grade_count, present_count, attendance_count = totals.get(key, [0, 0, 0, 0])
+        average = round(grade_sum / grade_count, 2) if grade_count else None
+        points.append({
+            "date": key,
+            "average": average,
+            # 5 балл — 100%, 4 балл — 80%
+            "percent": round(average / 5 * 100) if average is not None else None,
+            "grades_count": grade_count,
+            "attendance_percent": (
+                round(present_count / attendance_count * 100) if attendance_count else None
+            ),
+        })
+
+    return {"period": period, "points": points}
