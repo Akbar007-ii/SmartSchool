@@ -912,6 +912,9 @@ class Announcements(Base):
 
     event_date: Mapped[Optional[dt_date]] = mapped_column(Date)
 
+    # Кимдер үчүн: "STUDENT,PARENT" (TEACHER, DEPUTY да бар). NULL — баарына.
+    audience: Mapped[Optional[str]] = mapped_column(String(100))
+
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(

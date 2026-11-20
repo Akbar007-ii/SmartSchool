@@ -389,6 +389,29 @@ def test_journal_month_periods_and_performance(client, freeze_time):
     assert client.get("/dashboard/performance", headers=auth(S["teacher"])).status_code == 403
 
 
+def test_announcement_audience(client):
+    r = client.post("/announcements", headers=auth(S["director"]),
+                    data={"title": "Ата-энелер чогулушу", "audience": "PARENT,STUDENT"})
+    assert r.status_code == 201, r.text
+    assert r.json()["audience"] == ["STUDENT", "PARENT"]
+    ann_id = r.json()["id"]
+
+    def ids(token):
+        return {a["id"] for a in client.get("/announcements", headers=auth(token)).json()}
+
+    assert ann_id in ids(S["parent"]) and ann_id in ids(S["erkin"]) and ann_id in ids(S["director"])
+    assert ann_id not in ids(S["teacher"])
+    assert client.get(f"/announcements/{ann_id}", headers=auth(S["teacher"])).status_code == 404
+
+    r = client.put(f"/announcements/{ann_id}", headers=auth(S["director"]), data={"audience": "ALL"})
+    assert r.status_code == 200 and r.json()["audience"] is None
+    assert ann_id in ids(S["teacher"])
+
+    r = client.post("/announcements", headers=auth(S["director"]), data={"title": "Тест", "audience": "ALIENS"})
+    assert r.status_code == 422
+    assert client.delete(f"/announcements/{ann_id}", headers=auth(S["director"])).status_code == 200
+
+
 def test_approve_marks_excused(client, freeze_time):
     frozen = freeze_time(10, 30)
     today = str(frozen.date())

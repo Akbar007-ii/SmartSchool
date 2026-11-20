@@ -83,7 +83,7 @@ def public_school(school_id: int, db: Session = Depends(get_db)):
 
     news = (
         db.query(Announcements)
-        .filter(Announcements.school_id == school.id)
+        .filter(Announcements.school_id == school.id, Announcements.audience.is_(None))
         .order_by(Announcements.created_at.desc())
         .limit(5)
         .all()
