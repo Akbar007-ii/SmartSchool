@@ -5,7 +5,7 @@
 Мектептин ичиндеги иштерди (класстар, мугалимдер, журнал) директор жүргүзөт.
 
 Биринчи SYSTEM_ADMIN серверде скрипт менен түзүлөт:
-    docker compose exec api python create_system_admin.py --inn ... --name "..."
+    docker compose exec api python create_system_admin.py --email ... --name "..."
 """
 from typing import Optional
 
@@ -46,8 +46,6 @@ def serialize_school(school: Schools, students=0, teachers=0, classes=0, admins=
     data = {
         "id": school.id,
         "name": school.name,
-        "address": school.address,
-        "phone": school.phone,
         "email": school.email,
         "logo_url": school.logo_url,
         "banner_url": school.banner_url,
@@ -111,7 +109,7 @@ def list_schools(
         query = query.filter(Schools.is_active.is_(True))
     if search and search.strip():
         pattern = f"%{search.strip()}%"
-        query = query.filter(or_(Schools.name.ilike(pattern), Schools.address.ilike(pattern)))
+        query = query.filter(Schools.name.ilike(pattern))
 
     students = count_by_school(db, ["STUDENT"])
     teachers = count_by_school(db, list(TEACHER_ROLES))
@@ -145,9 +143,8 @@ def create_school(
         director, password = create_school_admin(
             db,
             school_id=school.id,
-            inn=data.director.inn,
+            email=data.director.email,
             full_name=data.director.full_name,
-            phone=data.director.phone,
             role="DIRECTOR",
         )
     except HTTPException:
@@ -161,7 +158,7 @@ def create_school(
         "school": serialize_school(school, admins=school_admins(db, school.id)),
         "director": {
             "id": director.id,
-            "inn": director.inn,
+            "email": director.email,
             "full_name": director.full_name,
             "temporary_password": password,
         },
@@ -250,9 +247,8 @@ def add_school_admin(
         user, password = create_school_admin(
             db,
             school_id=school.id,
-            inn=data.inn,
+            email=data.email,
             full_name=data.full_name,
-            phone=data.phone,
             role=data.role,
         )
     except HTTPException:
@@ -285,7 +281,7 @@ def reset_admin_password(
     return {
         "message": "Сыр сөз баштапкы абалга келтирилди",
         "user_id": user.id,
-        "inn": user.inn,
+        "email": user.email,
         "full_name": user.full_name,
         "temporary_password": password,
     }

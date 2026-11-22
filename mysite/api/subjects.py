@@ -41,7 +41,6 @@ def create_subject(
 ):
     new_subject = Subjects(
         name=data.name,
-        code=data.code,
         school_id=current_user.school_id
     )
 
@@ -117,8 +116,6 @@ def update_subject(
 
     if update.get("name"):
         subject.name = update["name"].strip()
-    if "code" in update:
-        subject.code = update["code"]
 
     try:
         db.commit()

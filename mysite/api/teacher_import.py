@@ -13,6 +13,7 @@ from mysite.db.models import Users
 from mysite.security.permissions import require_roles
 from mysite.security.hashing import hash_password
 from mysite.services.passwords import encrypt_temp_password, set_temp_password
+from mysite.db.schema import normalize_email
 from mysite.services.text_checks import validate_person_name
 
 
@@ -74,48 +75,44 @@ def import_teachers_excel(
         for cell in sheet[1]
     ]
 
-    required_headers = ["инн", "толук аты-жөнү", "телефон"]
+    required_headers = ["почта", "толук аты-жөнү"]
 
-    if headers[:3] != required_headers:
+    if headers[:2] != required_headers:
         workbook.close()
         raise HTTPException(
             status_code=400,
-            detail="Excel мамычалары: ИНН, Толук аты-жөнү, Телефон болушу керек"
+            detail="Excel мамычалары: Почта, Толук аты-жөнү болушу керек"
         )
 
     added_teachers = []
     errors = []
-    seen_inns = set()
+    seen_emails = set()
 
     try:
         for row_number, row in enumerate(
-            sheet.iter_rows(min_row=2, max_col=3, values_only=True),
+            sheet.iter_rows(min_row=2, max_col=2, values_only=True),
             start=2
         ):
 
-            inn_value, full_name, phone = row
+            email_value, full_name = row
 
             if all(value is None for value in row):
                 continue
 
-            # ИНН текшерүү
-            inn = str(inn_value).strip() if inn_value is not None else ""
+            try:
+                email = normalize_email(str(email_value or ""))
+            except ValueError as error:
+                errors.append({"row": row_number, "error": str(error)})
+                continue
 
-            if not inn.isdigit() or len(inn) != 14:
+            if email in seen_emails:
                 errors.append({
                     "row": row_number,
-                    "error": "ИНН 14 цифра болушу керек"
+                    "error": "Excel ичинде почта кайталанды"
                 })
                 continue
 
-            if inn in seen_inns:
-                errors.append({
-                    "row": row_number,
-                    "error": "Excel ичинде ИНН кайталанды"
-                })
-                continue
-
-            seen_inns.add(inn)
+            seen_emails.add(email)
 
             # Аты-жөнүн текшерүү
             if not full_name or len(str(full_name).strip()) < 3:
@@ -132,13 +129,13 @@ def import_teachers_excel(
                 continue
 
             existing_user = db.query(Users).filter(
-                Users.inn == inn
+                Users.email == email
             ).first()
 
             if existing_user:
                 errors.append({
                     "row": row_number,
-                    "error": "Бул ИНН мурда катталган"
+                    "error": "Бул почта мурда катталган"
                 })
                 continue
 
@@ -146,13 +143,12 @@ def import_teachers_excel(
             temporary_password = generate_password()
 
             teacher = Users(
-                inn=inn,
+                email=email,
                 full_name=str(full_name).strip(),
                 role="TEACHER",
                 hashed_password=hash_password(temporary_password),
                 temp_password_encrypted=encrypt_temp_password(temporary_password),
                 is_temp_password=True,
-                phone=str(phone).strip() if phone else None,
                 school_id=current_user.school_id,
                 is_active=True
             )
@@ -160,7 +156,7 @@ def import_teachers_excel(
             db.add(teacher)
 
             added_teachers.append({
-                "inn": inn,
+                "email": email,
                 "full_name": teacher.full_name,
                 "temporary_password": temporary_password
             })

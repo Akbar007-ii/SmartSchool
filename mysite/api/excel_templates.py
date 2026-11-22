@@ -1,7 +1,7 @@
 """Excel жүктөө үчүн даяр үлгүлөр (шаблондор).
 
 Мамычалар импорт эндпоинттери күткөн форматка так дал келет:
-    ИНН | Толук аты-жөнү | Телефон
+    Почта | Толук аты-жөнү
 """
 from io import BytesIO
 
@@ -15,7 +15,7 @@ from mysite.security.permissions import require_roles
 
 router = APIRouter(prefix="/admin/excel/templates", tags=["Excel Templates"])
 
-HEADERS = ["ИНН", "Толук аты-жөнү", "Телефон"]
+HEADERS = ["Почта", "Толук аты-жөнү"]
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -32,14 +32,8 @@ def build_template(sheet_title: str, example: list, filename: str) -> StreamingR
 
     sheet.append(example)
 
-    # ИНН 14 орундуу сан — Excel аны 2.0E+13 кылып бузбашы үчүн текст форматы
-    for row in range(1, 501):
-        sheet.cell(row=row, column=1).number_format = "@"
-        sheet.cell(row=row, column=3).number_format = "@"
-
-    sheet.column_dimensions["A"].width = 20
+    sheet.column_dimensions["A"].width = 32
     sheet.column_dimensions["B"].width = 40
-    sheet.column_dimensions["C"].width = 20
     sheet.freeze_panes = "A2"
 
     output = BytesIO()
@@ -58,7 +52,7 @@ def students_template(
 ):
     return build_template(
         "Окуучулар",
-        ["20101200800123", "Алиев Эркин Бакытович", "+996700123456"],
+        ["erkin.aliev@gmail.com", "Алиев Эркин Бакытович"],
         "students_template.xlsx",
     )
 
@@ -69,6 +63,6 @@ def teachers_template(
 ):
     return build_template(
         "Мугалимдер",
-        ["11503198500456", "Иванова Мария Петровна", "+996555123456"],
+        ["maria.ivanova@gmail.com", "Иванова Мария Петровна"],
         "teachers_template.xlsx",
     )

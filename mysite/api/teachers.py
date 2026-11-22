@@ -49,9 +49,8 @@ def serialize_teachers(db: Session, teachers: list[Users]) -> list[dict]:
     return [
         {
             "id": t.id,
-            "inn": t.inn,
+            "email": t.email,
             "full_name": t.full_name,
-            "phone": t.phone,
             "avatar_url": t.avatar_url,
             "role": t.role,
             "is_active": t.is_active,
@@ -94,7 +93,7 @@ def list_teachers(
         query = query.filter(Users.is_active.is_(True))
     if search and search.strip():
         pattern = f"%{search.strip()}%"
-        query = query.filter(or_(Users.full_name.ilike(pattern), Users.inn.like(pattern)))
+        query = query.filter(or_(Users.full_name.ilike(pattern), Users.email.like(pattern)))
 
     return serialize_teachers(db, query.order_by(Users.full_name).all())
 
@@ -123,8 +122,6 @@ def update_teacher(
 
     if update.get("full_name"):
         teacher.full_name = update["full_name"].strip()
-    if "phone" in update:
-        teacher.phone = update["phone"]
 
     db.commit()
     db.refresh(teacher)

@@ -19,15 +19,15 @@ router = APIRouter(prefix="/auth",tags=["Authentication"])
 def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     ip = login_limit.client_ip(request)
     # Сыр сөздү тандап табууга каршы: ийгиликсиз аракеттер чектелет (429)
-    login_limit.ensure_not_blocked(data.inn, ip)
+    login_limit.ensure_not_blocked(data.email, ip)
 
-    user = db.query(Users).filter(Users.inn == data.inn).first()
+    user = db.query(Users).filter(Users.email == data.email).first()
     if not user or not verify_password(data.password, user.hashed_password):
-        login_limit.record_failure(data.inn, ip)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="ИНН же сыр сөз туура эмес")
+        login_limit.record_failure(data.email, ip)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Почта же сыр сөз туура эмес")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Аккаунт убактылуу жабылган")
-    login_limit.reset(data.inn)
+    login_limit.reset(data.email)
 
     access_token = create_access_token({
         "sub": str(user.id),

@@ -32,15 +32,15 @@ admin_engine.dispose()
 Base.metadata.create_all(engine)
 
 db = SessionLocal()
-school = Schools(name="Postman тест мектеби №1", address="Бишкек шаары")
-other = Schools(name="Postman тест мектеби №2", address="Ош шаары")
+school = Schools(name="Postman тест мектеби №1")
+other = Schools(name="Postman тест мектеби №2")
 db.add_all([school, other])
 db.flush()
 db.add_all([
-    Users(inn="90000000000001", full_name="Тест Директор", role="DIRECTOR",
+    Users(email="u90000000000001@test.kg", full_name="Тест Директор", role="DIRECTOR",
           hashed_password=hash_password("Mektep#2026"), school_id=school.id,
           is_temp_password=True),
-    Users(inn="90000000000002", full_name="Башка Директор", role="DIRECTOR",
+    Users(email="u90000000000002@test.kg", full_name="Башка Директор", role="DIRECTOR",
           hashed_password=hash_password("Mektep#2026"), school_id=other.id,
           is_temp_password=False),
 ])

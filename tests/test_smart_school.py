@@ -16,14 +16,14 @@ def auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-def login(client, inn, password):
-    r = client.post("/auth/login", json={"inn": inn, "password": password})
+def login(client, email, password):
+    r = client.post("/auth/login", json={"email": email, "password": password})
     assert r.status_code == 200, r.text
     return r.json()
 
 
-def login_and_change(client, inn, temp_password, new_password="NewPass#2026"):
-    data = login(client, inn, temp_password)
+def login_and_change(client, email, temp_password, new_password="NewPass#2026"):
+    data = login(client, email, temp_password)
     assert data["requires_password_change"] is True
     r = client.post(
         "/auth/first-login-change",
@@ -37,7 +37,7 @@ def login_and_change(client, inn, temp_password, new_password="NewPass#2026"):
 def excel(rows):
     wb = Workbook()
     ws = wb.active
-    ws.append(["ИНН", "Толук аты-жөнү", "Телефон"])
+    ws.append(["Почта", "Толук аты-жөнү"])
     for row in rows:
         ws.append(row)
     buf = BytesIO()
@@ -54,20 +54,20 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 def test_setup_school(client, db):
     for key, name in (("school", "Тест мектеп №1"), ("other_school", "Тест мектеп №2")):
-        school = Schools(name=name, address="Бишкек")
+        school = Schools(name=name)
         db.add(school)
         db.flush()
         S[key] = school.id
 
-    db.add(Users(inn="90000000000001", full_name="Тест Директор", role="DIRECTOR",
+    db.add(Users(email="u90000000000001@test.kg", full_name="Тест Директор", role="DIRECTOR",
                  hashed_password=hash_password("Mektep#2026"), school_id=S["school"]))
-    db.add(Users(inn="90000000000002", full_name="Башка Директор", role="DIRECTOR",
+    db.add(Users(email="u90000000000002@test.kg", full_name="Башка Директор", role="DIRECTOR",
                  hashed_password=hash_password("Mektep#2026"), school_id=S["other_school"],
                  is_temp_password=False))
     db.commit()
 
-    S["director"] = login_and_change(client, "90000000000001", "Mektep#2026")
-    S["other_director"] = login(client, "90000000000002", "Mektep#2026")["access_token"]
+    S["director"] = login_and_change(client, "u90000000000001@test.kg", "Mektep#2026")
+    S["other_director"] = login(client, "u90000000000002@test.kg", "Mektep#2026")["access_token"]
 
 
 def test_class_subject_teachers(client):
@@ -78,28 +78,28 @@ def test_class_subject_teachers(client):
     assert r.status_code == 200, r.text
     S["class"] = r.json()["id"]
 
-    r = client.post("/subjects/", headers=h, json={"name": "Кыргыз тили", "code": "KG"})
+    r = client.post("/subjects/", headers=h, json={"name": "Кыргыз тили"})
     assert r.status_code == 200, r.text
     S["subject"] = r.json()["id"]
 
     # Мугалимдерди Excel менен жүктөө (ТЗдагы дарек)
     r = client.post("/admin/excel/import-teachers", headers=h, files={
         "file": ("teachers.xlsx", excel([
-            ["90000000000010", "Класс Жетекчи Мугалим", "+996700000010"],
-            ["90000000000011", "Башка Мугалим", None],
-            ["123", "Ката ИНН", None],
+            ["u90000000000010@test.kg", "Класс Жетекчи Мугалим"],
+            ["u90000000000011@test.kg", "Башка Мугалим"],
+            ["123", "Ката почта"],
         ]), XLSX)})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["total_added"] == 2 and body["total_errors"] == 1
-    teacher_pw = {t["inn"]: t["temporary_password"] for t in body["added_teachers"]}
+    teacher_pw = {t["email"]: t["temporary_password"] for t in body["added_teachers"]}
 
     # Завуч мугалимдердин убактылуу сыр сөздөрүн кийин да ала алат
     r = client.get("/admin/teachers/temp-passwords", headers=h)
-    listed = {t["inn"]: t for t in r.json()["teachers"]}
-    assert listed["90000000000010"]["temporary_password"] == teacher_pw["90000000000010"]
-    S["teacher_id"] = listed["90000000000010"]["id"]
-    S["teacher2_id"] = listed["90000000000011"]["id"]
+    listed = {t["email"]: t for t in r.json()["teachers"]}
+    assert listed["u90000000000010@test.kg"]["temporary_password"] == teacher_pw["u90000000000010@test.kg"]
+    S["teacher_id"] = listed["u90000000000010@test.kg"]["id"]
+    S["teacher2_id"] = listed["u90000000000011@test.kg"]["id"]
 
     r = client.put(f"/classes/{S['class']}/class-teacher", headers=h,
                    json={"teacher_id": S["teacher_id"]})
@@ -115,13 +115,13 @@ def test_class_subject_teachers(client):
         "teacher_id": S["teacher2_id"], "class_id": S["class"], "subject_id": S["subject"]})
     assert r.status_code == 400
 
-    S["teacher"] = login_and_change(client, "90000000000010", teacher_pw["90000000000010"])
-    S["teacher2"] = login_and_change(client, "90000000000011", teacher_pw["90000000000011"])
+    S["teacher"] = login_and_change(client, "u90000000000010@test.kg", teacher_pw["u90000000000010@test.kg"])
+    S["teacher2"] = login_and_change(client, "u90000000000011@test.kg", teacher_pw["u90000000000011@test.kg"])
 
     # Сыр сөз алмашкандан кийин убактылуу сыр сөз базадан өчөт
     r = client.get("/admin/teachers/temp-passwords", headers=h)
-    listed = {t["inn"]: t for t in r.json()["teachers"]}
-    assert listed["90000000000010"]["temporary_password"] is None
+    listed = {t["email"]: t for t in r.json()["teachers"]}
+    assert listed["u90000000000010@test.kg"]["temporary_password"] is None
 
 
 def test_import_students_and_temp_passwords(client):
@@ -133,9 +133,9 @@ def test_import_students_and_temp_passwords(client):
     r = client.post("/admin/excel/import-students", headers=h,
                     data={"class_id": str(S["class"])},
                     files={"file": ("students.xlsx", excel([
-                        ["90000000000101", "Алиев Эркин", "+996700000101"],
-                        ["90000000000102", "Токтосунов Бекзат", None],
-                        ["90000000000103", "Жумабекова Айдана", None],
+                        ["u90000000000101@test.kg", "Алиев Эркин"],
+                        ["u90000000000102@test.kg", "Токтосунов Бекзат"],
+                        ["u90000000000103@test.kg", "Жумабекова Айдана"],
                     ]), XLSX)})
     assert r.status_code == 200, r.text
     assert r.json()["total_added"] == 3
@@ -145,7 +145,7 @@ def test_import_students_and_temp_passwords(client):
     assert r.status_code == 200, r.text
     students = r.json()["students"]
     assert len(students) == 3 and all(s["temporary_password"] for s in students)
-    S["students"] = {s["inn"]: s for s in students}
+    S["students"] = {s["email"]: s for s in students}
 
     r = client.get(f"/classes/{S['class']}/temp-passwords?format=xlsx", headers=auth(S["teacher"]))
     assert r.status_code == 200 and r.content[:2] == b"PK"
@@ -160,22 +160,22 @@ def test_import_students_and_temp_passwords(client):
 
 
 def test_parent_and_student_accounts(client):
-    erkin = S["students"]["90000000000101"]
-    bekzat = S["students"]["90000000000102"]
+    erkin = S["students"]["u90000000000101@test.kg"]
+    bekzat = S["students"]["u90000000000102@test.kg"]
 
     r = client.post("/parents/register", json={
-        "inn": "90000000000201", "full_name": "Асанова Назира", "password": "Parent#2026",
-        "student_inn": erkin["inn"], "student_password": erkin["temporary_password"]})
+        "email": "u90000000000201@test.kg", "full_name": "Асанова Назира", "password": "Parent#2026",
+        "student_email": erkin["email"], "student_password": erkin["temporary_password"]})
     assert r.status_code == 200, r.text
     S["parent"] = r.json()["access_token"]
 
     r = client.post("/parents/add-child", headers=auth(S["parent"]), json={
-        "student_inn": bekzat["inn"], "student_password": bekzat["temporary_password"]})
+        "student_email": bekzat["email"], "student_password": bekzat["temporary_password"]})
     assert r.status_code == 200, r.text
 
     S["erkin_id"], S["bekzat_id"] = erkin["id"], bekzat["id"]
-    S["aidana_id"] = S["students"]["90000000000103"]["id"]
-    S["erkin"] = login_and_change(client, erkin["inn"], erkin["temporary_password"])
+    S["aidana_id"] = S["students"]["u90000000000103@test.kg"]["id"]
+    S["erkin"] = login_and_change(client, erkin["email"], erkin["temporary_password"])
 
     r = client.get("/me", headers=auth(S["parent"]))
     assert r.status_code == 200 and len(r.json()["children"]) == 2
@@ -183,21 +183,21 @@ def test_parent_and_student_accounts(client):
 
     # Ошол эле баланы кайра кошууга болбойт
     r = client.post("/parents/add-child", headers=auth(S["parent"]), json={
-        "student_inn": bekzat["inn"], "student_password": bekzat["temporary_password"]})
+        "student_email": bekzat["email"], "student_password": bekzat["temporary_password"]})
     assert r.status_code == 400
 
     # Экинчи ата-эне (ата) ошол эле балага байланат, үчүнчүсү — жок
     r = client.post("/parents/register", json={
-        "inn": "90000000000202", "full_name": "Асанов Бакыт", "password": "Parent#2026",
-        "student_inn": bekzat["inn"], "student_password": bekzat["temporary_password"]})
+        "email": "u90000000000202@test.kg", "full_name": "Асанов Бакыт", "password": "Parent#2026",
+        "student_email": bekzat["email"], "student_password": bekzat["temporary_password"]})
     assert r.status_code == 200, r.text
     second_parent = r.json()["access_token"]
     r = client.get(f"/journal/summary?student_id={bekzat['id']}", headers=auth(second_parent))
     assert r.status_code == 200
 
     r = client.post("/parents/register", json={
-        "inn": "90000000000203", "full_name": "Үчүнчү Ата-эне", "password": "Parent#2026",
-        "student_inn": bekzat["inn"], "student_password": bekzat["temporary_password"]})
+        "email": "u90000000000203@test.kg", "full_name": "Үчүнчү Ата-эне", "password": "Parent#2026",
+        "student_email": bekzat["email"], "student_password": bekzat["temporary_password"]})
     assert r.status_code == 400
 
 
@@ -629,13 +629,13 @@ def test_portal_announcements_profile(client):
     r = client.post("/me/change-password", headers=auth(S["erkin"]),
                     json={"current_password": "NewPass#2026", "new_password": "Another#2026"})
     assert r.status_code == 200
-    login(client, "90000000000101", "Another#2026")
+    login(client, "u90000000000101@test.kg", "Another#2026")
 
     # Класс жетекчи окуучунун сыр сөзүн баштапкы абалга келтирет
     r = client.post(f"/classes/{S['class']}/students/{S['erkin_id']}/reset-password",
                     headers=auth(S["teacher"]))
     assert r.status_code == 200
-    assert login(client, "90000000000101", r.json()["temporary_password"])["requires_password_change"]
+    assert login(client, "u90000000000101@test.kg", r.json()["temporary_password"])["requires_password_change"]
 
 
 # =====================================================
@@ -662,8 +662,8 @@ def test_teachers_and_subjects_crud(client):
     r = client.get("/teachers?search=Башка", headers=h)
     assert [t["id"] for t in r.json()] == [S["teacher2_id"]]
 
-    r = client.put(f"/teachers/{S['teacher2_id']}", headers=h, json={"phone": "+996555000011"})
-    assert r.status_code == 200 and r.json()["phone"] == "+996555000011"
+    r = client.put(f"/teachers/{S['teacher2_id']}", headers=h, json={"full_name": "Башка Мугалим Жаңы"})
+    assert r.status_code == 200 and r.json()["full_name"] == "Башка Мугалим Жаңы"
 
     r = client.delete(f"/teachers/{S['teacher2_id']}", headers=h)
     assert r.status_code == 200
@@ -678,7 +678,7 @@ def test_teachers_and_subjects_crud(client):
     assert client.post("/subjects/", headers=h, json={"name": "Кандайдыр сабак"}).status_code == 422
     r = client.post("/subjects/", headers=h, json={"name": "Дүйнөлүк тарых"})
     subject_id = r.json()["id"]
-    r = client.put(f"/subjects/{subject_id}", headers=h, json={"name": "Кыргызстан тарыхы", "code": "HIST"})
+    r = client.put(f"/subjects/{subject_id}", headers=h, json={"name": "Кыргызстан тарыхы"})
     assert r.status_code == 200 and r.json()["name"] == "Кыргызстан тарыхы"
     r = client.put(f"/subjects/{subject_id}", headers=h, json={"name": "Кыргыз тили"})
     assert r.status_code == 400
@@ -795,28 +795,28 @@ def test_schedule(client):
 def test_login_rate_limit(client):
     from mysite.security import login_limit
 
-    inn = "90000000000999"
+    email = "u90000000000999@test.kg"
     try:
-        for _ in range(login_limit.MAX_FAILURES_PER_INN):
-            r = client.post("/auth/login", json={"inn": inn, "password": "wrong-password"})
+        for _ in range(login_limit.MAX_FAILURES_PER_LOGIN):
+            r = client.post("/auth/login", json={"email": email, "password": "wrong-password"})
             assert r.status_code == 401
-        r = client.post("/auth/login", json={"inn": inn, "password": "wrong-password"})
+        r = client.post("/auth/login", json={"email": email, "password": "wrong-password"})
         assert r.status_code == 429 and int(r.headers["Retry-After"]) > 0
     finally:
-        login_limit.reset(inn)
+        login_limit.reset(email)
         login_limit._failures.clear()
 
 
 def test_system_admin(client, db):
     from mysite.services.passwords import set_temp_password
 
-    admin = Users(inn="90000000000900", full_name="Платформа Админ", role="SYSTEM_ADMIN",
+    admin = Users(email="u90000000000900@test.kg", full_name="Платформа Админ", role="SYSTEM_ADMIN",
                   hashed_password="", school_id=None)
     temp = set_temp_password(admin)
     db.add(admin)
     db.commit()
 
-    sa = auth(login_and_change(client, "90000000000900", temp))
+    sa = auth(login_and_change(client, "u90000000000900@test.kg", temp))
 
     r = client.get("/me", headers=sa)
     assert r.status_code == 200 and r.json()["role"] == "SYSTEM_ADMIN" and r.json()["school"] is None
@@ -832,34 +832,34 @@ def test_system_admin(client, db):
 
     # Жаңы мектеп + директор
     r = client.post("/system/schools", headers=sa, json={
-        "name": "Тест мектеп №3", "address": "Ош",
-        "director": {"inn": "90000000000301", "full_name": "Үчүнчү Директор"}})
+        "name": "Тест мектеп №3",
+        "director": {"email": "u90000000000301@test.kg", "full_name": "Үчүнчү Директор"}})
     assert r.status_code == 201, r.text
     new_school = r.json()["school"]["id"]
     new_director_pw = r.json()["director"]["temporary_password"]
     assert r.json()["school"]["director_name"] == "Үчүнчү Директор"
 
-    # ИНН кайталанса мектеп да түзүлбөйт
+    # Почта кайталанса мектеп да түзүлбөйт
     r = client.post("/system/schools", headers=sa, json={
-        "name": "Кайталанма мектеп", "director": {"inn": "90000000000301", "full_name": "Дагы Директор"}})
+        "name": "Кайталанма мектеп", "director": {"email": "u90000000000301@test.kg", "full_name": "Дагы Директор"}})
     assert r.status_code == 400
     assert not [s for s in client.get("/system/schools?search=Кайталанма", headers=sa).json()]
 
     # Жаңы директор кирип, өз мектебин гана көрөт
-    d3 = auth(login_and_change(client, "90000000000301", new_director_pw))
+    d3 = auth(login_and_change(client, "u90000000000301@test.kg", new_director_pw))
     assert client.get("/schools/me", headers=d3).json()["id"] == new_school
     assert client.get(f"/classes/{S['class']}", headers=d3).status_code == 404
 
     # Директор завуч кошот, завуч киргенде админ укуктары бар
-    r = client.post("/admin/deputies", headers=d3, json={"inn": "90000000000302", "full_name": "Үчүнчү Завуч"})
+    r = client.post("/admin/deputies", headers=d3, json={"email": "u90000000000302@test.kg", "full_name": "Үчүнчү Завуч"})
     assert r.status_code == 201, r.text
     deputy_id, deputy_pw = r.json()["id"], r.json()["temporary_password"]
-    dep = auth(login_and_change(client, "90000000000302", deputy_pw))
+    dep = auth(login_and_change(client, "u90000000000302@test.kg", deputy_pw))
     assert client.post("/classes/", headers=dep, json={
         "grade_number": 5, "letter": "А", "academic_year": "2026-2027"}).status_code == 200
     # Завуч башка завуч кошо албайт, тизмеде сыр сөздөрдү көрбөйт
     assert client.post("/admin/deputies", headers=dep, json={
-        "inn": "90000000000303", "full_name": "Дагы Завуч"}).status_code == 403
+        "email": "u90000000000303@test.kg", "full_name": "Дагы Завуч"}).status_code == 403
     assert client.get("/admin/deputies", headers=dep).json()[0]["temporary_password"] is None
     # Директор завучтун сыр сөзүн жаңырта алат
     assert client.post(f"/admin/users/{deputy_id}/reset-password", headers=d3).status_code == 200
@@ -879,40 +879,40 @@ def test_system_admin(client, db):
 
     # Бар мектепке кошумча директор/завуч
     r = client.post(f"/system/schools/{S['school']}/admins", headers=sa, json={
-        "inn": "90000000000003", "full_name": "Биринчи Завуч", "role": "DEPUTY"})
+        "email": "u90000000000003@test.kg", "full_name": "Биринчи Завуч", "role": "DEPUTY"})
     assert r.status_code == 201 and r.json()["role"] == "DEPUTY"
 
     # Чектөөлөр: бир директор, эң көп 5 завуч (активдүүлөр гана саналат)
     r = client.post(f"/system/schools/{new_school}/admins", headers=sa, json={
-        "inn": "90000000000310", "full_name": "Экинчи Директор", "role": "DIRECTOR"})
+        "email": "u90000000000310@test.kg", "full_name": "Экинчи Директор", "role": "DIRECTOR"})
     assert r.status_code == 400
 
     deputy_ids = [deputy_id]
     for index, surname in enumerate(["Экинчи", "Үчүнчү", "Төртүнчү", "Бешинчи"]):
         r = client.post("/admin/deputies", headers=d3, json={
-            "inn": f"9000000000032{index}", "full_name": f"{surname} Завуч"})
+            "email": f"u9000000000032{index}@test.kg", "full_name": f"{surname} Завуч"})
         assert r.status_code == 201, r.text
         deputy_ids.append(r.json()["id"])
 
-    r = client.post("/admin/deputies", headers=d3, json={"inn": "90000000000329", "full_name": "Алтынчы Завуч"})
+    r = client.post("/admin/deputies", headers=d3, json={"email": "u90000000000329@test.kg", "full_name": "Алтынчы Завуч"})
     assert r.status_code == 400
     r = client.post(f"/system/schools/{new_school}/admins", headers=sa, json={
-        "inn": "90000000000329", "full_name": "Алтынчы Завуч", "role": "DEPUTY"})
+        "email": "u90000000000329@test.kg", "full_name": "Алтынчы Завуч", "role": "DEPUTY"})
     assert r.status_code == 400
 
     # Бирин өчүргөндөн кийин жаңысын кошсо болот, ал эми өчүрүлгөнүн кайра күйгүзүүгө болбойт
     assert client.delete(f"/admin/deputies/{deputy_ids[-1]}", headers=d3).status_code == 200
     assert client.post("/admin/deputies", headers=d3, json={
-        "inn": "90000000000329", "full_name": "Алтынчы Завуч"}).status_code == 201
+        "email": "u90000000000329@test.kg", "full_name": "Алтынчы Завуч"}).status_code == 201
     assert client.post(f"/system/users/{deputy_ids[-1]}/activate", headers=sa).status_code == 400
     # Директор да 5 завуч толуп турганда өчүрүлгөндү кайра күйгүзө албайт
     assert client.post(f"/admin/deputies/{deputy_ids[-1]}/activate", headers=d3).status_code == 400
 
-    # Директор өз завучунун аты-жөнүн жана телефонун өзгөртөт
+    # Директор өз завучунун аты-жөнүн өзгөртөт
     r = client.put(f"/admin/deputies/{deputy_ids[1]}", headers=d3,
-                   json={"full_name": "Жаңы Аты Завуч", "phone": "+996700000001"})
+                   json={"full_name": "Жаңы Аты Завуч"})
     assert r.status_code == 200, r.text
-    assert r.json()["full_name"] == "Жаңы Аты Завуч" and r.json()["phone"] == "+996700000001"
+    assert r.json()["full_name"] == "Жаңы Аты Завуч"
     # Башка мектептин директору жана завучтун өзү өзгөртө албайт
     assert client.put(f"/admin/deputies/{deputy_ids[1]}", headers=auth(S["director"]),
                       json={"full_name": "Бөтөн"}).status_code == 404
@@ -925,9 +925,74 @@ def test_system_admin(client, db):
     # Директорду өчүрүп, ордуна жаңысын дайындоо
     assert client.post(f"/system/users/{d3_id}/deactivate", headers=sa).status_code == 200
     r = client.post(f"/system/schools/{new_school}/admins", headers=sa, json={
-        "inn": "90000000000310", "full_name": "Экинчи Директор", "role": "DIRECTOR"})
+        "email": "u90000000000310@test.kg", "full_name": "Экинчи Директор", "role": "DIRECTOR"})
     assert r.status_code == 201, r.text
     assert client.post(f"/system/users/{d3_id}/activate", headers=sa).status_code == 400
 
     r = client.get("/system/stats", headers=sa)
     assert r.json()["schools"] >= 3 and r.json()["deputies"] >= 2
+
+
+# =====================================================
+# Окуучуларды автоматтык өткөрүү жана кийин класстарын оңдоо
+# =====================================================
+
+def test_promotion_auto_then_move(client, db):
+    school = Schools(name="Өткөрүү тест мектеби")
+    db.add(school)
+    db.flush()
+    db.add(Users(email="promo.director@test.kg", full_name="Өткөрүү Директор", role="DIRECTOR",
+                 hashed_password=hash_password("Mektep#2026"), school_id=school.id,
+                 is_temp_password=False))
+    db.commit()
+    h = auth(login(client, "promo.director@test.kg", "Mektep#2026")["access_token"])
+
+    class_ids = {}
+    for grade in (5, 11):
+        r = client.post("/classes/", headers=h, json={
+            "grade_number": grade, "letter": "А", "academic_year": "2030-2031"})
+        assert r.status_code == 200, r.text
+        class_ids[grade] = r.json()["id"]
+
+    student_ids = {}
+    for email, name, grade in (
+        ("promo.a@test.kg", "Асанов Алмаз", 5),
+        ("promo.b@test.kg", "Бакиров Бекжан", 5),
+        ("promo.c@test.kg", "Чынгызова Чолпон", 11),
+    ):
+        r = client.post("/students/", headers=h, json={
+            "email": email, "full_name": name, "class_id": class_ids[grade]})
+        assert r.status_code == 200, r.text
+        student_ids[email] = r.json()["id"]
+
+    # Өткөрүүгө чейин жыйынтык бош
+    r = client.get("/students/promotion/review?target_academic_year=2031-2032", headers=h)
+    assert r.status_code == 200 and r.json()["students"] == []
+
+    r = client.post("/students/promotion/execute", headers=h, json={
+        "source_academic_year": "2030-2031", "target_academic_year": "2031-2032"})
+    assert r.status_code == 200, r.text
+    assert r.json()["promoted"] == 2 and r.json()["graduated"] == 1
+
+    review = {s["student_id"]: s for s in client.get(
+        "/students/promotion/review?target_academic_year=2031-2032", headers=h).json()["students"]}
+    assert review[student_ids["promo.a@test.kg"]]["to_class"] == "6-А"
+    assert review[student_ids["promo.c@test.kg"]]["to_class"] is None
+
+    # Бир окуучу 5-класста калат (класс жаңы окуу жылында түзүлөт), бүтүрүүчү 11-класста калат
+    for email, grade in (("promo.b@test.kg", 5), ("promo.c@test.kg", 11)):
+        r = client.put("/students/promotion/move", headers=h, json={
+            "student_id": student_ids[email], "target_academic_year": "2031-2032",
+            "grade_number": grade, "letter": "А"})
+        assert r.status_code == 200, r.text
+
+    review = {s["student_id"]: s for s in client.get(
+        "/students/promotion/review?target_academic_year=2031-2032", headers=h).json()["students"]}
+    assert review[student_ids["promo.b@test.kg"]]["to_class"] == "5-А"
+    assert review[student_ids["promo.c@test.kg"]]["to_class"] == "11-А"
+
+    # Өткөрүүгө катышпаган окуучуну которууга болбойт
+    r = client.put("/students/promotion/move", headers=h, json={
+        "student_id": student_ids["promo.a@test.kg"], "target_academic_year": "2035-2036",
+        "grade_number": 7, "letter": "А"})
+    assert r.status_code == 400

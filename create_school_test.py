@@ -7,8 +7,7 @@ db = SessionLocal()
 
 try:
     school = Schools(
-        name="Test School 2",
-        address="Bishkek"
+        name="Test School 2"
     )
 
     db.add(school)
@@ -18,7 +17,7 @@ try:
     print("SCHOOL 2 CREATED:", school.id)
 
     user = Users(
-        inn="12345678901234",
+        email="u12345678901234@test.kg",
         full_name="Second Director",
         role="DIRECTOR",
         hashed_password=hash_password("School2#2026"),

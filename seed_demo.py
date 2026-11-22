@@ -41,8 +41,8 @@ db = SessionLocal()
 if db.query(Schools).filter(Schools.name == DEMO_SCHOOL).first():
     sys.exit("Демо мектеп мурда эле түзүлгөн — эч нерсе өзгөргөн жок.")
 
-if db.query(Users).filter(Users.inn.like("100000000000%")).first():
-    sys.exit("КАТА: демо ИНН номерлери (100000000000xx) мурда эле колдонулган.")
+if db.query(Users).filter(Users.email.like("%@demo.kg")).first():
+    sys.exit("КАТА: демо почталары (@demo.kg) мурда эле колдонулган.")
 
 password_hash = hash_password(DEMO_PASSWORD)
 year = current_academic_year()
@@ -50,30 +50,28 @@ today = now_local().date()
 accounts = []
 
 
-def user(inn, name, role, school_id):
-    u = Users(inn=inn, full_name=name, role=role, hashed_password=password_hash,
+def user(email, name, role, school_id):
+    u = Users(email=email, full_name=name, role=role, hashed_password=password_hash,
               is_temp_password=False, school_id=school_id)
     db.add(u)
     db.flush()
-    accounts.append((role, inn, name))
+    accounts.append((role, email, name))
     return u
 
 
 try:
     school = Schools(
         name=DEMO_SCHOOL,
-        address="Бишкек ш., Ч.Айтматов көч. 25",
-        phone="+996700123456",
         email="demo@smartschool.kg",
         director_name="Асанов Бакыт",
     )
     db.add(school)
     db.flush()
 
-    director = user("10000000000001", "Асанов Бакыт", "DIRECTOR", school.id)
-    user("10000000000002", "Сыдыкова Айгүл", "DEPUTY", school.id)
-    teacher_kg = user("10000000000010", "Иванова Мария Петровна", "TEACHER", school.id)
-    teacher_math = user("10000000000011", "Сапарова Гүлнара", "TEACHER", school.id)
+    director = user("director@demo.kg", "Асанов Бакыт", "DIRECTOR", school.id)
+    user("deputy@demo.kg", "Сыдыкова Айгүл", "DEPUTY", school.id)
+    teacher_kg = user("teacher.kg@demo.kg", "Иванова Мария Петровна", "TEACHER", school.id)
+    teacher_math = user("teacher.math@demo.kg", "Сапарова Гүлнара", "TEACHER", school.id)
 
     class_a = Classes(grade_number=11, letter="А", school_id=school.id,
                       class_teacher_id=teacher_kg.id, academic_year=year)
@@ -83,8 +81,8 @@ try:
     db.flush()
 
     subjects = {}
-    for name, code in (("Кыргыз тили", "KG"), ("Математика", "MATH"), ("Физика", "PHYS")):
-        subject = Subjects(name=name, code=code, school_id=school.id)
+    for name in ("Кыргыз тили", "Математика", "Физика"):
+        subject = Subjects(name=name, school_id=school.id)
         db.add(subject)
         db.flush()
         subjects[name] = subject
@@ -104,22 +102,22 @@ try:
     db.flush()
 
     students = {}
-    for inn, name, school_class in (
-        ("10000000000101", "Алиев Эркин", class_a),
-        ("10000000000102", "Токтосунов Бекзат", class_a),
-        ("10000000000103", "Жумабекова Айдана", class_a),
-        ("10000000000104", "Касымов Нурлан", class_b),
-        ("10000000000105", "Жолдошев Адилет", class_b),
-        ("10000000000106", "Кадырова Айназик", class_b),
+    for email, name, school_class in (
+        ("erkin@demo.kg", "Алиев Эркин", class_a),
+        ("bekzat@demo.kg", "Токтосунов Бекзат", class_a),
+        ("aidana@demo.kg", "Жумабекова Айдана", class_a),
+        ("nurlan@demo.kg", "Касымов Нурлан", class_b),
+        ("adilet@demo.kg", "Жолдошев Адилет", class_b),
+        ("ainazik@demo.kg", "Кадырова Айназик", class_b),
     ):
-        s = user(inn, name, "STUDENT", school.id)
+        s = user(email, name, "STUDENT", school.id)
         db.add(StudentEnrollments(student_id=s.id, class_id=school_class.id,
                                   academic_year=year, status="ACTIVE"))
         students[s.id] = (s, school_class)
 
-    parent = user("10000000000201", "Алиева Назира", "PARENT", school.id)
-    erkin = next(s for s, _ in students.values() if s.inn == "10000000000101")
-    aidana = next(s for s, _ in students.values() if s.inn == "10000000000103")
+    parent = user("parent@demo.kg", "Алиева Назира", "PARENT", school.id)
+    erkin = next(s for s, _ in students.values() if s.email == "erkin@demo.kg")
+    aidana = next(s for s, _ in students.values() if s.email == "aidana@demo.kg")
     db.add_all([
         ParentStudents(parent_id=parent.id, student_id=erkin.id, relationship_type="Апасы"),
         ParentStudents(parent_id=parent.id, student_id=aidana.id, relationship_type="Апасы"),
@@ -175,8 +173,8 @@ finally:
 
 print(f"Демо мектеп түзүлдү: {DEMO_SCHOOL} (окуу жылы {year})")
 print(f"Бардык аккаунттардын сыр сөзү: {DEMO_PASSWORD}\n")
-print(f"{'Ролу':<10} {'Логин (ИНН)':<16} Аты-жөнү")
-for role, inn, name in accounts:
-    print(f"{role:<10} {inn:<16} {name}")
+print(f"{'Ролу':<10} {'Логин (почта)':<22} Аты-жөнү")
+for role, email, name in accounts:
+    print(f"{role:<10} {email:<22} {name}")
 print("\nИванова М.П. — 11-А, Сапарова Г. — 11-Б класс жетекчиси.")
 print("Алиева Назира — Эркин менен Айдананын ата-энеси.")

@@ -21,21 +21,21 @@ FILES.mkdir(exist_ok=True)
 def excel(name, rows):
     wb = Workbook()
     ws = wb.active
-    ws.append(["ИНН", "Толук аты-жөнү", "Телефон"])
+    ws.append(["Почта", "Толук аты-жөнү"])
     for row in rows:
         ws.append(row)
     wb.save(FILES / name)
 
 
-excel("teachers_admin.xlsx", [["90000000000011", "Экинчи Мугалим", "+996700000011"]])
-excel("teachers_router.xlsx", [["90000000000012", "Үчүнчү Мугалим", None]])
-excel("teachers_users.xlsx", [["90000000000013", "Төртүнчү Мугалим", None]])
+excel("teachers_admin.xlsx", [["u90000000000011@test.kg", "Экинчи Мугалим", "+996700000011"]])
+excel("teachers_router.xlsx", [["u90000000000012@test.kg", "Үчүнчү Мугалим", None]])
+excel("teachers_users.xlsx", [["u90000000000013@test.kg", "Төртүнчү Мугалим", None]])
 excel("students_11a.xlsx", [
-    ["90000000000101", "Алиев Эркин", "+996700000101"],
-    ["90000000000102", "Токтосунов Бекзат", None],
-    ["90000000000103", "Жумабекова Айдана", None],
+    ["u90000000000101@test.kg", "Алиев Эркин", "+996700000101"],
+    ["u90000000000102@test.kg", "Токтосунов Бекзат", None],
+    ["u90000000000103@test.kg", "Жумабекова Айдана", None],
 ])
-excel("students_5b.xlsx", [["90000000000104", "Касымов Нурлан", None]])
+excel("students_5b.xlsx", [["u90000000000104@test.kg", "Касымов Нурлан", None]])
 (FILES / "page.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
 (FILES / "extra.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x01" * 64)
 (FILES / "formula.pdf").write_bytes(b"%PDF-1.4\n% Smart School test\n")
@@ -118,9 +118,9 @@ def check(title, expr):
 NEW_PW = "NewPass#2026"
 
 
-def login_flow(label, inn, pw_var, token_var):
+def login_flow(label, email, pw_var, token_var):
     req(f"{label}: убактылуу сыр сөз менен кирүү", "POST", "/auth/login",
-        body='{"inn": "%s", "password": "{{%s}}"}' % (inn, pw_var),
+        body='{"email": "%s", "password": "{{%s}}"}' % (email, pw_var),
         tests=save("tmp_token", "data.access_token")
         + "\n" + check("Сыр сөздү алмаштыруу талап кылынат", "data.requires_password_change === true"))
     req(f"{label}: биринчи кирүүдө сыр сөздү алмаштыруу", "POST", "/auth/first-login-change",
@@ -140,20 +140,20 @@ req("Мектептердин тизмеси (издөө)", "GET", "/public/scho
 # ============ 2. Авторизация ============
 folder("02. Авторизация жана директордун профили")
 req("Ката сыр сөз -> 401", "POST", "/auth/login",
-    body={"inn": "90000000000001", "password": "wrong-password"}, expect=401)
+    body={"email": "u90000000000001@test.kg", "password": "wrong-password"}, expect=401)
 req("Токенсиз суроо -> 401", "GET", "/me", expect=401)
 pm_director_pw = "director_pw"
-login_flow("Директор", "90000000000001", pm_director_pw, "director")
+login_flow("Директор", "u90000000000001@test.kg", pm_director_pw, "director")
 req("Башка мектептин директору кирет", "POST", "/auth/login",
-    body={"inn": "90000000000002", "password": "Mektep#2026"},
+    body={"email": "u90000000000002@test.kg", "password": "Mektep#2026"},
     tests=save("other_director", "data.access_token"))
 req("Сервердин абалы (health)", "GET", "/health", tests=check("status ok", "data.status === 'ok'"))
 req("Менин профилим", "GET", "/me", token="director",
     tests=save("school_id", "data.school_id") + "\n" + check("Ролу DIRECTOR", "data.role === 'DIRECTOR'"))
-req("Профилди жаңыртуу", "PUT", "/me", token="director", body={"phone": "+996700000001"})
+req("Профилди жаңыртуу", "PUT", "/me", token="director", body={"full_name": "Тест Директор"})
 req("Мектептин маалыматы", "GET", "/schools/me", token="director")
 req("Мектепти өзгөртүү", "PUT", "/schools/me", token="director",
-    body={"address": "Бишкек ш., Ч.Айтматов көч. 25", "phone": "+996700123456", "director_name": "Тест Директор"})
+    body={"director_name": "Тест Директор"})
 req("Баннер жүктөө", "POST", "/schools/me/banner", token="director", files=[("file", "page.png")],
     tests=check("banner_url коюлду", "data.banner_url.endsWith('.png')"))
 req("Логотип жүктөө", "POST", "/schools/me/logo", token="director", files=[("file", "extra.png")])
@@ -180,16 +180,16 @@ req("Классты өзгөртүү", "PUT", "/classes/{{class3_id}}", token="d
     body={"grade_number": 1, "letter": "Г", "academic_year": "2026-2027"})
 req("Классты өчүрүү", "DELETE", "/classes/{{class3_id}}", token="director")
 req("Предмет: Кыргыз тили", "POST", "/subjects/", token="director",
-    body={"name": "Кыргыз тили", "code": "KG"}, tests=save("subject_id", "data.id"))
+    body={"name": "Кыргыз тили"}, tests=save("subject_id", "data.id"))
 req("Предмет: Математика", "POST", "/subjects/", token="director",
-    body={"name": "Математика", "code": "MATH"}, tests=save("subject2_id", "data.id"))
+    body={"name": "Математика"}, tests=save("subject2_id", "data.id"))
 req("Предметтердин тизмеси", "GET", "/subjects/", token="director")
 req("Бир предмет", "GET", "/subjects/{{subject_id}}", token="director")
 
 # ============ 4. Мугалимдер ============
 folder("04. Мугалимдер, Excel жана бекитүүлөр")
 req("Мугалимди бирден кошуу", "POST", "/users/create-teacher", token="director",
-    body={"inn": "90000000000010", "full_name": "Класс Жетекчи Мугалим", "phone": "+996700000010"},
+    body={"email": "u90000000000010@test.kg", "full_name": "Класс Жетекчи Мугалим"},
     tests=save("teacher_id", "data.id") + "\n" + save("teacher_pw", "data.temporary_password"))
 req("Excel үлгүсү: мугалимдер", "GET", "/admin/excel/templates/teachers", token="director")
 req("Excel: мугалимдерди жүктөө (ТЗ дареги)", "POST", "/admin/excel/import-teachers", token="director",
@@ -203,8 +203,8 @@ req("Excel: /users/import-excel (сыр сөздөр файлы кайтат)", 
     token="director", files=[("file", "teachers_users.xlsx")])
 req("Мугалимдердин убактылуу сыр сөздөрү", "GET", "/admin/teachers/temp-passwords", token="director",
     tests=check("4 мугалим", "data.total === 4")
-    + "\n" + save("teacher2_id", "data.teachers.find(t => t.inn === '90000000000011').id")
-    + "\n" + save("teacher3_id", "data.teachers.find(t => t.inn === '90000000000012').id")
+    + "\n" + save("teacher2_id", "data.teachers.find(t => t.email === 'u90000000000011@test.kg').id")
+    + "\n" + save("teacher3_id", "data.teachers.find(t => t.email === 'u90000000000012@test.kg').id")
     + "\n" + check("Сыр сөз тизмеде көрүнөт", "data.teachers.every(t => !!t.temporary_password)"))
 req("Сыр сөздөр Excel түрүндө", "GET", "/admin/teachers/temp-passwords?format=xlsx", token="director")
 req("Мугалимдин сыр сөзүн reset (/users)", "POST", "/users/{{teacher3_id}}/reset-password", token="director")
@@ -230,8 +230,8 @@ req("Бекитүүлөрдүн тизмеси", "GET", "/teacher-assignments/",
     tests=check("3 бекитүү", "data.length === 3"))
 req("Мугалимдин бекитүүлөрү", "GET", "/teacher-assignments/teacher/{{teacher_id}}", token="director")
 req("Бекитүүнү өчүрүү", "DELETE", "/teacher-assignments/{{assignment3_id}}", token="director")
-login_flow("Класс жетекчи", "90000000000010", "teacher_pw", "teacher")
-login_flow("Экинчи мугалим", "90000000000011", "teacher2_pw", "teacher2")
+login_flow("Класс жетекчи", "u90000000000010@test.kg", "teacher_pw", "teacher")
+login_flow("Экинчи мугалим", "u90000000000011@test.kg", "teacher2_pw", "teacher2")
 req("Мугалимдин профили", "GET", "/me", token="teacher", tests=check("Класс жетекчи", "data.is_class_teacher === true"))
 req("Мугалим админ эндпоинтине кире албайт -> 403", "GET", "/admin/teachers/temp-passwords", token="teacher", expect=403)
 
@@ -241,16 +241,16 @@ req("Excel үлгүсү: окуучулар", "GET", "/admin/excel/templates/stu
 req("Excel: 11-А окуучуларын жүктөө (ТЗ дареги)", "POST", "/admin/excel/import-students",
     token="director", form={"class_id": "{{class_id}}"}, files=[("file", "students_11a.xlsx")],
     tests=check("3 окуучу кошулду", "data.total_added === 3")
-    + "\n" + save("erkin_pw", "data.added_students.find(s => s.inn === '90000000000101').temporary_password")
-    + "\n" + save("bekzat_pw", "data.added_students.find(s => s.inn === '90000000000102').temporary_password"))
+    + "\n" + save("erkin_pw", "data.added_students.find(s => s.email === 'u90000000000101@test.kg').temporary_password")
+    + "\n" + save("bekzat_pw", "data.added_students.find(s => s.email === 'u90000000000102@test.kg').temporary_password"))
 req("Excel: /students/import-excel/{class}", "POST", "/students/import-excel/{{class2_id}}",
     token="director", files=[("file", "students_5b.xlsx")],
     tests=check("1 окуучу кошулду", "data.total_added === 1"))
 req("Окуучуну бирден кошуу", "POST", "/students/", token="director",
-    body='{"inn": "90000000000105", "full_name": "Жолдошев Адилет", "class_id": {{class2_id}}}',
+    body='{"email": "u90000000000105@test.kg", "full_name": "Жолдошев Адилет", "class_id": {{class2_id}}}',
     tests=save("student5_id", "data.id"))
 req("Мугалим окуучу кошо албайт -> 403", "POST", "/students/", token="teacher",
-    body='{"inn": "90000000000106", "full_name": "Уруксатсыз Окуучу", "class_id": {{class2_id}}}',
+    body='{"email": "u90000000000106@test.kg", "full_name": "Уруксатсыз Окуучу", "class_id": {{class2_id}}}',
     expect=403)
 req("Бардык окуучулар", "GET", "/students/", token="director",
     tests=check("5 окуучу", "data.length === 5"))
@@ -258,15 +258,15 @@ req("Класстын окуучулары", "GET", "/students/class/{{class_id}
     tests=check("3 окуучу", "data.length === 3"))
 req("Бир окуучу", "GET", "/students/{{student5_id}}", token="director")
 req("Окуучуну өзгөртүү", "PUT", "/students/{{student5_id}}", token="director",
-    body={"phone": "+996700000105"})
+    body={"full_name": "Жолдошев Адилет"})
 req("Окуучунун тарыхы", "GET", "/students/{{student5_id}}/history", token="director")
 req("Окуучуну активсиз кылуу", "DELETE", "/students/{{student5_id}}", token="director")
 req("Класс жетекчи: логин жана сыр сөздөр тизмеси", "GET", "/classes/{{class_id}}/temp-passwords",
     token="teacher",
     tests=check("3 окуучу, сыр сөздөрү менен", "data.total === 3 && data.students.every(s => !!s.temporary_password)")
-    + "\n" + save("erkin_id", "data.students.find(s => s.inn === '90000000000101').id")
-    + "\n" + save("bekzat_id", "data.students.find(s => s.inn === '90000000000102').id")
-    + "\n" + save("aidana_id", "data.students.find(s => s.inn === '90000000000103').id"))
+    + "\n" + save("erkin_id", "data.students.find(s => s.email === 'u90000000000101@test.kg').id")
+    + "\n" + save("bekzat_id", "data.students.find(s => s.email === 'u90000000000102@test.kg').id")
+    + "\n" + save("aidana_id", "data.students.find(s => s.email === 'u90000000000103@test.kg').id"))
 req("Сыр сөздөр Excel түрүндө", "GET", "/classes/{{class_id}}/temp-passwords?format=xlsx", token="teacher")
 req("Башка мугалим сыр сөздөрдү көрбөйт -> 403", "GET", "/classes/{{class_id}}/temp-passwords",
     token="teacher2", expect=403)
@@ -276,16 +276,16 @@ req("Класс жетекчи окуучунун сыр сөзүн reset кыл
 # ============ 6. Ата-эне жана окуучу ============
 folder("06. Ата-эне жана окуучунун аккаунттары")
 req("Ата-эне катталат (баласынын ИНН + убактылуу сыр сөзү)", "POST", "/parents/register",
-    body='{"inn": "90000000000201", "full_name": "Асанова Назира", "password": "Parent#2026", '
-         '"student_inn": "90000000000101", "student_password": "{{erkin_pw}}"}',
+    body='{"email": "u90000000000201@test.kg", "full_name": "Асанова Назира", "password": "Parent#2026", '
+         '"student_email": "u90000000000101@test.kg", "student_password": "{{erkin_pw}}"}',
     tests=save("parent", "data.access_token"))
 req("Экинчи баласын кошуу", "POST", "/parents/add-child", token="parent",
-    body='{"student_inn": "90000000000102", "student_password": "{{bekzat_pw}}"}')
+    body='{"student_email": "u90000000000102@test.kg", "student_password": "{{bekzat_pw}}"}')
 req("Менин балдарым", "GET", "/parents/my-children", token="parent",
     tests=check("2 бала", "data.total_children === 2"))
 req("Ата-эненин профили", "GET", "/me", token="parent",
     tests=check("Балдары класс аты менен", "data.children.length === 2 && data.children[0].class_name === '11-А'"))
-login_flow("Окуучу", "90000000000101", "erkin_pw", "student")
+login_flow("Окуучу", "u90000000000101@test.kg", "erkin_pw", "student")
 req("Окуучунун профили", "GET", "/me", token="student",
     tests=check("Классы 11-А", "data.student.class_name === '11-А'"))
 
@@ -474,7 +474,7 @@ req("Аватар жүктөө", "POST", "/me/avatar", token="student", files=[(
 req("Сыр сөздү алмаштыруу", "POST", "/me/change-password", token="student",
     body={"current_password": NEW_PW, "new_password": "Another#2026"})
 req("Жаңы сыр сөз менен кирүү", "POST", "/auth/login",
-    body={"inn": "90000000000101", "password": "Another#2026"},
+    body={"email": "u90000000000101@test.kg", "password": "Another#2026"},
     tests=check("Убактылуу эмес", "data.requires_password_change === false"))
 
 # ============ 13. Multi-tenant ============

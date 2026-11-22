@@ -46,9 +46,8 @@ def get_students(
 
         result.append({
             "id": student.id,
-            "inn": student.inn,
+            "email": student.email,
             "full_name": student.full_name,
-            "phone": student.phone,
             "class_id": enrollment.class_id if enrollment else None,
             "is_active": student.is_active
         })
@@ -92,9 +91,8 @@ def get_class_students(
         if student and student.is_active:
             result.append({
                 "id": student.id,
-                "inn": student.inn,
+                "email": student.email,
                 "full_name": student.full_name,
-                "phone": student.phone,
                 "class_id": class_id,
                 "academic_year": enrollment.academic_year
             })
@@ -127,9 +125,8 @@ def get_student(
 
     return {
         "id": student.id,
-        "inn": student.inn,
+        "email": student.email,
         "full_name": student.full_name,
-        "phone": student.phone,
         "is_active": student.is_active,
         "enrollments": [
             {
@@ -182,28 +179,15 @@ def create_student(
     ),
     db: Session = Depends(get_db)
 ):
-    # ИНН текшерүү
-    if not data.inn.isdigit():
-        raise HTTPException(
-            status_code=400,
-            detail="ИНН сандардан турушу керек"
-        )
-
-    if len(data.inn) != 14:
-        raise HTTPException(
-            status_code=400,
-            detail="ИНН 14 цифра болушу керек"
-        )
-
-    # ИНН мурда катталганбы?
+    # Почта мурда катталганбы?
     existing = db.query(Users).filter(
-        Users.inn == data.inn
+        Users.email == data.email
     ).first()
 
     if existing:
         raise HTTPException(
             status_code=400,
-            detail="Бул ИНН мурда катталган"
+            detail="Бул почта мурда катталган"
         )
 
     # Классты текшерүү
@@ -227,9 +211,8 @@ def create_student(
 
     try:
         student = Users(
-            inn=data.inn,
+            email=data.email,
             full_name=data.full_name.strip(),
-            phone=data.phone,
             role="STUDENT",
             hashed_password=hash_password(password),
             temp_password_encrypted=encrypt_temp_password(password),
@@ -255,7 +238,7 @@ def create_student(
         return {
             "message": "Окуучу ийгиликтүү катталды",
             "id": student.id,
-            "inn": student.inn,
+            "email": student.email,
             "full_name": student.full_name,
             "role": student.role,
             "class_id": school_class.id,
@@ -310,8 +293,6 @@ def update_student(
 
         student.full_name = update_data["full_name"].strip()
 
-    if "phone" in update_data:
-        student.phone = update_data["phone"]
 
     try:
         db.commit()
@@ -327,9 +308,8 @@ def update_student(
     return {
         "message": "Окуучунун маалыматы жаңыртылды",
         "id": student.id,
-        "inn": student.inn,
+        "email": student.email,
         "full_name": student.full_name,
-        "phone": student.phone
     }
 
 

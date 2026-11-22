@@ -139,7 +139,7 @@ def admin_create_assignment(
 def _password_row(user: Users) -> dict:
     return {
         "id": user.id,
-        "inn": user.inn,
+        "email": user.email,
         "full_name": user.full_name,
         "role": user.role,
         "is_temp_password": user.is_temp_password,
@@ -155,15 +155,15 @@ def _passwords_xlsx(title: str, rows: list[dict], filename: str) -> StreamingRes
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = title[:31]
-    sheet.append(["№", "Аты-жөнү", "Логин (ИНН)", "Убактылуу сыр сөз"])
+    sheet.append(["№", "Аты-жөнү", "Логин (почта)", "Убактылуу сыр сөз"])
     for number, row in enumerate(rows, start=1):
         sheet.append([
             number,
             row["full_name"],
-            row["inn"],
+            row["email"],
             row["temporary_password"] or "өзгөртүлгөн",
         ])
-    for column, width in zip("ABCD", (5, 40, 20, 22)):
+    for column, width in zip("ABCD", (5, 40, 32, 22)):
         sheet.column_dimensions[column].width = width
 
     output = BytesIO()
@@ -220,7 +220,7 @@ def admin_reset_password(
     return {
         "message": "Сыр сөз баштапкы абалга келтирилди",
         "user_id": user.id,
-        "inn": user.inn,
+        "email": user.email,
         "full_name": user.full_name,
         "temporary_password": password,
     }
@@ -257,9 +257,8 @@ def create_deputy(
     user, password = create_school_admin(
         db,
         school_id=current_user.school_id,
-        inn=data.inn,
+        email=data.email,
         full_name=data.full_name,
-        phone=data.phone,
         role="DEPUTY",
     )
     db.commit()
@@ -295,8 +294,6 @@ def update_deputy(
         if not update["full_name"] or not update["full_name"].strip():
             raise HTTPException(status_code=400, detail="Аты-жөнү бош болбошу керек")
         deputy.full_name = update["full_name"].strip()
-    if "phone" in update:
-        deputy.phone = (update["phone"] or "").strip() or None
 
     db.commit()
     db.refresh(deputy)
@@ -404,7 +401,7 @@ def class_reset_student_password(
     return {
         "message": "Окуучунун сыр сөзү жаңыртылды",
         "student_id": student.id,
-        "inn": student.inn,
+        "email": student.email,
         "full_name": student.full_name,
         "temporary_password": password,
     }

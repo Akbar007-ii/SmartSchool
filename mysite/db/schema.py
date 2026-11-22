@@ -1,4 +1,5 @@
 
+import re
 from datetime import date, datetime, time
 from enum import Enum
 from typing import Optional, List, Literal
@@ -20,19 +21,28 @@ class UserRole(str, Enum):
     STUDENT = "STUDENT"
     PARENT = "PARENT"
 
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def normalize_email(value: str) -> str:
+    """Почтаны текшерет жана кичине тамгаларга келтирет (логин катары колдонулат)."""
+    email = value.strip().lower()
+    if len(email) > 254 or not EMAIL_PATTERN.match(email):
+        raise ValueError("Электрондук почта туура эмес")
+    return email
+
+
 class BaseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class SchoolCreate(BaseModel):
     name: str = Field(min_length=2, max_length=200)
-    address: Optional[str] = None
-    phone: Optional[str] = None
     email: Optional[str] = None
     logo_url: Optional[str] = None
     banner_url: Optional[str] = None
     director_name: Optional[str] = None
 
-    @field_validator("name", "address")
+    @field_validator("name")
     @classmethod
     def check_names(cls, value):
         return value if value is None else validate_free_text(value)
@@ -49,14 +59,12 @@ class SchoolUpdate(BaseModel):
         min_length=2,
         max_length=200
     )
-    address: Optional[str] = None
-    phone: Optional[str] = None
     email: Optional[str] = None
     logo_url: Optional[str] = None
     banner_url: Optional[str] = None
     director_name: Optional[str] = None
 
-    @field_validator("name", "address")
+    @field_validator("name")
     @classmethod
     def check_names(cls, value):
         return value if value is None else validate_free_text(value)
@@ -70,8 +78,6 @@ class SchoolUpdate(BaseModel):
 class SchoolOut(BaseSchema):
     id: int
     name: str
-    address: Optional[str]
-    phone: Optional[str]
     email: Optional[str]
     logo_url: Optional[str]
     banner_url: Optional[str]
@@ -80,11 +86,10 @@ class SchoolOut(BaseSchema):
     created_at: datetime
 
 class UserCreate(BaseModel):
-    inn: str
+    email: str
     full_name: str = Field(min_length=3, max_length=200)
     role: UserRole
     password: str = Field(min_length=8)
-    phone: Optional[str] = None
     school_id: int
 
     @field_validator("full_name")
@@ -92,20 +97,17 @@ class UserCreate(BaseModel):
     def check_full_name(cls, value):
         return value if value is None else validate_person_name(value)
 
-    @field_validator("inn")
+    @field_validator("email")
     @classmethod
-    def validate_inn(cls, value):
-        if not value.isdigit() or len(value) != 14:
-            raise ValueError("ИНН 14 цифрадан турушу керек")
-        return value
+    def check_email(cls, value):
+        return normalize_email(value)
 
 
 class UserOut(BaseSchema):
     id: int
-    inn: str
+    email: str
     full_name: str
     role: UserRole
-    phone: Optional[str]
     avatar_url: Optional[str]
     school_id: int
     is_active: bool
@@ -115,7 +117,6 @@ class UserOut(BaseSchema):
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
-    phone: Optional[str] = None
     avatar_url: Optional[str] = None
 
     @field_validator("full_name")
@@ -125,15 +126,13 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 class LoginRequest(BaseModel):
-    inn: str = Field(min_length=14, max_length=14)
+    email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1)
 
-    @field_validator("inn")
+    @field_validator("email")
     @classmethod
-    def validate_inn(cls, value):
-        if not value.isdigit():
-            raise ValueError("ИНН 14 цифрадан турушу керек")
-        return value
+    def check_email(cls, value):
+        return normalize_email(value)
 
 
 class FirstLoginChange(BaseModel):
@@ -173,7 +172,6 @@ class ClassOut(BaseSchema):
 
 class SubjectCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100)
-    code: Optional[str] = None
 
     @field_validator("name")
     @classmethod
@@ -185,7 +183,6 @@ class SubjectCreate(BaseModel):
 class SubjectOut(BaseSchema):
     id: int
     name: str
-    code: Optional[str]
     school_id: int
 
 
@@ -208,35 +205,31 @@ class TeacherAssignmentOut(BaseSchema):
 
 
 class TeacherCreate(BaseModel):
-    inn: str
+    email: str
     full_name: str = Field(min_length=3, max_length=200)
-    phone: Optional[str] = None
 
     @field_validator("full_name")
     @classmethod
     def check_full_name(cls, value):
         return value if value is None else validate_person_name(value)
 
-    @field_validator("inn")
+    @field_validator("email")
     @classmethod
-    def validate_inn(cls, value):
-        if not value.isdigit() or len(value) != 14:
-            raise ValueError("ИНН 14 цифра болушу керек")
-        return value
+    def check_email(cls, value):
+        return normalize_email(value)
 
 
 class TeacherCreatedOut(BaseModel):
     id: int
-    inn: str
+    email: str
     full_name: str
     temporary_password: str
     role: str
     school_id: int
 
 class StudentCreate(BaseModel):
-    inn: str = Field(min_length=14, max_length=14)
+    email: str
     full_name: str = Field(min_length=3, max_length=200)
-    phone: Optional[str] = None
 
     @field_validator("full_name")
     @classmethod
@@ -244,12 +237,10 @@ class StudentCreate(BaseModel):
         return value if value is None else validate_person_name(value)
     class_id: int
 
-    @field_validator("inn")
+    @field_validator("email")
     @classmethod
-    def validate_inn(cls, value):
-        if not value.isdigit() or len(value) != 14:
-            raise ValueError("ИНН 14 цифра болушу керек")
-        return value
+    def check_email(cls, value):
+        return normalize_email(value)
 
 class StudentPromotionRequest(BaseModel):
     source_academic_year: str = Field(
@@ -264,16 +255,24 @@ class StudentPromotionRequest(BaseModel):
 
     excluded_student_ids: List[int] = Field(default_factory=list)
 
+
+class StudentPromotionMove(BaseModel):
+    # Автоматтык өткөрүүдөн кийин окуучуну кийинки окуу жылынын башка классына которуу
+    student_id: int
+    target_academic_year: str = Field(min_length=9, max_length=20)
+    grade_number: int = Field(ge=1, le=11)
+    letter: str = Field(min_length=1, max_length=5)
+
+    @field_validator("letter")
+    @classmethod
+    def check_letter(cls, value):
+        return validate_class_letter(value)
+
 class StudentUpdate(BaseModel):
     full_name: Optional[str] = Field(
         default=None,
         min_length=3,
         max_length=200
-    )
-
-    phone: Optional[str] = Field(
-        default=None,
-        max_length=20
     )
 
     @field_validator("full_name")
@@ -284,9 +283,8 @@ class StudentUpdate(BaseModel):
 
 
 class ParentRegister(BaseModel):
-    inn: str = Field(min_length=14, max_length=14)
+    email: str
     full_name: str = Field(min_length=3, max_length=200)
-    phone: Optional[str] = Field(default=None, max_length=20)
     password: str = Field(min_length=8)
 
     @field_validator("full_name")
@@ -294,32 +292,33 @@ class ParentRegister(BaseModel):
     def check_full_name(cls, value):
         return value if value is None else validate_person_name(value)
 
-    student_inn: str = Field(min_length=14, max_length=14)
+    student_email: str
     student_password: str = Field(min_length=1)
 
-    @field_validator("inn")
+    @field_validator("email", "student_email")
     @classmethod
-    def validate_inn(cls, value):
-        if not value.isdigit():
-            raise ValueError("ИНН 14 цифра болушу керек")
-        return value
+    def check_email(cls, value):
+        return normalize_email(value)
 
 
 class ParentLinkStudent(BaseModel):
-    student_inn: str = Field(min_length=14, max_length=14)
+    student_email: str
     student_temporary_password: str = Field(min_length=1)
     relationship_type: Optional[str] = None
 
-    @field_validator("student_inn")
+    @field_validator("student_email")
     @classmethod
-    def validate_student_inn(cls, value):
-        if not value.isdigit():
-            raise ValueError("ИНН 14 цифра болушу керек")
-        return value
+    def check_email(cls, value):
+        return normalize_email(value)
 
 class ParentAddChild(BaseModel):
-    student_inn: str = Field(min_length=14, max_length=14)
+    student_email: str
     student_password: str = Field(min_length=1)
+
+    @field_validator("student_email")
+    @classmethod
+    def check_email(cls, value):
+        return normalize_email(value)
 
 class ClassTeacherAssign(BaseModel):
     teacher_id: Optional[int] = None
@@ -432,7 +431,6 @@ class OlympiadAutoSelect(BaseModel):
 
 class ProfileUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
-    phone: Optional[str] = Field(default=None, max_length=20)
 
     @field_validator("full_name")
     @classmethod
@@ -451,7 +449,6 @@ class PasswordChange(BaseModel):
 
 class TeacherUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
-    phone: Optional[str] = Field(default=None, max_length=20)
 
     @field_validator("full_name")
     @classmethod
@@ -498,27 +495,23 @@ class ScheduleLessonUpdate(BaseModel):
 # =====================================================
 
 class SchoolAdminCreate(BaseModel):
-    inn: str = Field(min_length=14, max_length=14)
+    email: str
     full_name: str = Field(min_length=3, max_length=200)
-    phone: Optional[str] = Field(default=None, max_length=20)
 
     @field_validator("full_name")
     @classmethod
     def check_full_name(cls, value):
         return value if value is None else validate_person_name(value)
 
-    @field_validator("inn")
+    @field_validator("email")
     @classmethod
-    def validate_inn(cls, value):
-        if not value.isdigit():
-            raise ValueError("ИНН 14 цифрадан турушу керек")
-        return value
+    def check_email(cls, value):
+        return normalize_email(value)
 
 
 class SchoolAdminUpdate(BaseModel):
-    # ИНН (логин) өзгөрбөйт; аты-жөнү жана телефону гана
+    # Почта (логин) өзгөрбөйт; аты-жөнү гана
     full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
-    phone: Optional[str] = Field(default=None, max_length=20)
 
     @field_validator("full_name")
     @classmethod
@@ -537,7 +530,6 @@ class SystemSchoolCreate(SchoolCreate):
 
 class SubjectUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=100)
-    code: Optional[str] = Field(default=None, max_length=30)
 
     @field_validator("name")
     @classmethod

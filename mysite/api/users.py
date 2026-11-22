@@ -11,7 +11,7 @@ from fastapi import (
     UploadFile,
     File
 )
-from mysite.db.schema import TeacherCreate,TeacherCreatedOut
+from mysite.db.schema import TeacherCreate,TeacherCreatedOut,normalize_email
 
 from fastapi.responses import StreamingResponse
 
@@ -80,24 +80,23 @@ def create_teacher(
     db: Session = Depends(get_db)
 ):
 
-    # ИНН мурда колдонулганбы?
+    # Почта мурда колдонулганбы?
     existing_user = db.query(Users).filter(
-        Users.inn == data.inn
+        Users.email == data.email
     ).first()
 
     if existing_user:
         raise HTTPException(
             status_code=400,
-            detail="Бул ИНН базага мурда катталган"
+            detail="Бул почта мурда катталган"
         )
 
     # Убактылуу сыр сөз
     temporary_password = generate_password()
 
     teacher = Users(
-        inn=data.inn,
+        email=data.email,
         full_name=data.full_name,
-        phone=data.phone,
         role="TEACHER",
         hashed_password=hash_password(temporary_password),
         temp_password_encrypted=encrypt_temp_password(temporary_password),
@@ -112,7 +111,7 @@ def create_teacher(
 
     return {
         "id": teacher.id,
-        "inn": teacher.inn,
+        "email": teacher.email,
         "full_name": teacher.full_name,
         "temporary_password": temporary_password,
         "role": teacher.role,
@@ -155,7 +154,7 @@ async def import_teachers_excel(
     created_teachers = []
     errors = []
 
-    # Биринчи сап: ИНН | Аты-жөнү | Телефон
+    # Биринчи сап: Почта | Аты-жөнү
     for row_number, row in enumerate(
         sheet.iter_rows(min_row=2, values_only=True),
         start=2
@@ -164,16 +163,12 @@ async def import_teachers_excel(
         if not row or all(value is None for value in row):
             continue
 
-        inn = str(row[0]).strip() if row[0] is not None else ""
         full_name = str(row[1]).strip() if len(row) > 1 and row[1] else ""
-        phone = str(row[2]).strip() if len(row) > 2 and row[2] else None
 
-        # ИНН текшерүү
-        if not inn.isdigit() or len(inn) != 14:
-            errors.append({
-                "row": row_number,
-                "error": "ИНН 14 цифра болушу керек"
-            })
+        try:
+            email = normalize_email(str(row[0] or ""))
+        except ValueError as error:
+            errors.append({"row": row_number, "error": str(error)})
             continue
 
         if len(full_name) < 3:
@@ -191,13 +186,13 @@ async def import_teachers_excel(
 
         # Мурда кошулганбы?
         existing_user = db.query(Users).filter(
-            Users.inn == inn
+            Users.email == email
         ).first()
 
         if existing_user:
             errors.append({
                 "row": row_number,
-                "error": "Бул ИНН базага мурда кошулган"
+                "error": "Бул почта мурда катталган"
             })
             continue
 
@@ -205,13 +200,12 @@ async def import_teachers_excel(
         temporary_password = generate_password()
 
         teacher = Users(
-            inn=inn,
+            email=email,
             full_name=full_name,
             role="TEACHER",
             hashed_password=hash_password(temporary_password),
             temp_password_encrypted=encrypt_temp_password(temporary_password),
             is_temp_password=True,
-            phone=phone,
             school_id=current_user.school_id,
             is_active=True
         )
@@ -219,7 +213,7 @@ async def import_teachers_excel(
         db.add(teacher)
 
         created_teachers.append({
-            "inn": inn,
+            "email": email,
             "full_name": full_name,
             "password": temporary_password
         })
@@ -239,14 +233,14 @@ async def import_teachers_excel(
     result_sheet.title = "Мугалимдер"
 
     result_sheet.append([
-        "ИНН",
+        "Почта",
         "Аты-жөнү",
         "Убактылуу сыр сөз"
     ])
 
     for teacher in created_teachers:
         result_sheet.append([
-            teacher["inn"],
+            teacher["email"],
             teacher["full_name"],
             teacher["password"]
         ])

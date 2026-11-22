@@ -20,8 +20,6 @@ def school_card(school: Schools) -> dict:
     return {
         "id": school.id,
         "name": school.name,
-        "address": school.address,
-        "phone": school.phone,
         "email": school.email,
         "logo_url": school.logo_url,
         "banner_url": school.banner_url,
@@ -66,7 +64,7 @@ def public_schools(
     query = db.query(Schools).filter(Schools.is_active.is_(True))
     if search and search.strip():
         pattern = f"%{search.strip()}%"
-        query = query.filter(Schools.name.ilike(pattern) | Schools.address.ilike(pattern))
+        query = query.filter(Schools.name.ilike(pattern))
 
     schools = query.order_by(Schools.name).offset(max(offset, 0)).limit(max(1, min(limit, 100))).all()
     return [school_card(s) for s in schools]

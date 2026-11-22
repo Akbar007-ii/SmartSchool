@@ -69,24 +69,18 @@ def register_parent(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    if not data.inn.isdigit() or len(data.inn) != 14:
-        raise HTTPException(
-            status_code=400,
-            detail="ИНН 14 цифра болушу керек"
-        )
-
     if db.query(Users).filter(
-        Users.inn == data.inn
+        Users.email == data.email
     ).first():
         raise HTTPException(
             status_code=400,
-            detail="Бул ИНН мурда катталган"
+            detail="Бул почта мурда катталган"
         )
 
-    login_limit.ensure_not_blocked(data.student_inn, login_limit.client_ip(request))
+    login_limit.ensure_not_blocked(data.student_email, login_limit.client_ip(request))
 
     student = db.query(Users).filter(
-        Users.inn == data.student_inn,
+        Users.email == data.student_email,
         Users.role == "STUDENT",
         Users.is_active.is_(True)
     ).first()
@@ -107,19 +101,18 @@ def register_parent(
         data.student_password,
         student.hashed_password
     ):
-        login_limit.record_failure(data.student_inn, login_limit.client_ip(request))
+        login_limit.record_failure(data.student_email, login_limit.client_ip(request))
         raise HTTPException(
             status_code=400,
-            detail="Окуучунун ИННи же паролу туура эмес"
+            detail="Окуучунун почтасы же паролу туура эмес"
         )
 
     ensure_can_link(db, None, student.id)
 
     try:
         parent = Users(
-            inn=data.inn,
+            email=data.email,
             full_name=data.full_name.strip(),
-            phone=data.phone,
             role="PARENT",
             hashed_password=hash_password(data.password),
             is_temp_password=False,
@@ -152,7 +145,7 @@ def register_parent(
         db.rollback()
         raise HTTPException(
             status_code=400,
-            detail="Бул окуучу мурда байланыштырылган же ИНН катталган"
+            detail="Бул окуучу мурда байланыштырылган же почта катталган"
         )
 
     except Exception:
@@ -173,10 +166,10 @@ def add_child(
     ),
     db: Session = Depends(get_db)
 ):
-    login_limit.ensure_not_blocked(data.student_inn, login_limit.client_ip(request))
+    login_limit.ensure_not_blocked(data.student_email, login_limit.client_ip(request))
 
     student = db.query(Users).filter(
-        Users.inn == data.student_inn,
+        Users.email == data.student_email,
         Users.role == "STUDENT",
         Users.school_id == current_user.school_id,
         Users.is_active.is_(True)
@@ -198,10 +191,10 @@ def add_child(
         data.student_password,
         student.hashed_password
     ):
-        login_limit.record_failure(data.student_inn, login_limit.client_ip(request))
+        login_limit.record_failure(data.student_email, login_limit.client_ip(request))
         raise HTTPException(
             status_code=400,
-            detail="Окуучунун ИННи же паролу туура эмес"
+            detail="Окуучунун почтасы же паролу туура эмес"
         )
 
     ensure_can_link(db, current_user.id, student.id)
@@ -252,9 +245,8 @@ def get_my_children(
         if student:
             children.append({
                 "id": student.id,
-                "inn": student.inn,
+                "email": student.email,
                 "full_name": student.full_name,
-                "phone": student.phone,
                 "is_active": student.is_active
             })
 

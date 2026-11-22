@@ -48,8 +48,6 @@ class Schools(Base):
         nullable=False
     )
 
-    address: Mapped[Optional[str]] = mapped_column(String(300))
-    phone: Mapped[Optional[str]] = mapped_column(String(20))
     email: Mapped[Optional[str]] = mapped_column(String(100))
     logo_url: Mapped[Optional[str]] = mapped_column(String(500))
     banner_url: Mapped[Optional[str]] = mapped_column(String(500))
@@ -96,8 +94,9 @@ class Users(Base):
         index=True
     )
 
-    inn: Mapped[str] = mapped_column(
-        String(14),
+    # Логин: электрондук почта, кичине тамгалар менен сакталат
+    email: Mapped[str] = mapped_column(
+        String(254),
         unique=True,
         nullable=False,
         index=True
@@ -123,8 +122,6 @@ class Users(Base):
         default=True,
         nullable=False
     )
-
-    phone: Mapped[Optional[str]] = mapped_column(String(20))
 
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
 
@@ -190,11 +187,6 @@ class Users(Base):
     )
 
     __table_args__ = (
-        CheckConstraint(
-            "inn ~ '^[0-9]{14}$'",
-            name="check_inn_format"
-        ),
-
         CheckConstraint(
             "role IN ('SYSTEM_ADMIN','DIRECTOR', 'DEPUTY', 'CLASS_TEACHER', "
             "'TEACHER', 'STUDENT', 'PARENT')",
@@ -302,10 +294,6 @@ class Subjects(Base):
     name: Mapped[str] = mapped_column(
         String(100),
         nullable=False
-    )
-
-    code: Mapped[Optional[str]] = mapped_column(
-        String(30)
     )
 
     school_id: Mapped[int] = mapped_column(

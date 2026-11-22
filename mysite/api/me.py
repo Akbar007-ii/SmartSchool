@@ -24,10 +24,9 @@ router = APIRouter(tags=["Profile"])
 def base_profile(user: Users) -> dict:
     return {
         "id": user.id,
-        "inn": user.inn,
+        "email": user.email,
         "full_name": user.full_name,
         "role": user.role,
-        "phone": user.phone,
         "avatar_url": user.avatar_url,
         "school_id": user.school_id,
         "is_temp_password": user.is_temp_password,
@@ -45,7 +44,6 @@ def get_me(
     profile["school"] = {
         "id": school.id,
         "name": school.name,
-        "address": school.address,
         "logo_url": school.logo_url,
         "banner_url": school.banner_url,
     } if school else None
@@ -109,8 +107,6 @@ def update_me(
             )
         current_user.full_name = update["full_name"].strip()
 
-    if "phone" in update:
-        current_user.phone = update["phone"]
 
     db.commit()
     db.refresh(current_user)
