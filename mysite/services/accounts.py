@@ -1,4 +1,6 @@
-"""Мектеп жетекчилеринин (директор, завуч) аккаунттарын түзүү."""
+"""Аккаунттар: жетекчилерди түзүү, почтаны алмаштыруу, ата-эне коддору."""
+import secrets
+
 from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -60,6 +62,27 @@ def create_school_admin(
     db.add(user)
     db.flush()
     return user, password
+
+
+def change_email(db: Session, user: Users, email: str) -> None:
+    """Логинди (почтаны) алмаштырат; башка аккаунтта бар болсо 400."""
+    if email == user.email:
+        return
+    if db.query(Users.id).filter(Users.email == email, Users.id != user.id).first():
+        raise HTTPException(status_code=400, detail=f"{email} почтасы мурда катталган")
+    user.email = email
+
+
+# Окшош белгилер (0/O, 1/I/L) жок: кодду кагаздан көчүрүүдө ката кетпесин
+PARENT_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+PARENT_CODE_LENGTH = 8
+
+
+def new_parent_code(db: Session) -> str:
+    while True:
+        code = "".join(secrets.choice(PARENT_CODE_ALPHABET) for _ in range(PARENT_CODE_LENGTH))
+        if not db.query(Users.id).filter(Users.parent_code == code).first():
+            return code
 
 
 def admin_row(user: Users) -> dict:

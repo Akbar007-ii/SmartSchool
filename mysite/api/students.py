@@ -4,6 +4,7 @@ import string
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from mysite.db.schema import StudentUpdate
+from mysite.services.accounts import change_email
 
 from mysite.db.database import get_db
 from mysite.db.models import (
@@ -292,6 +293,9 @@ def update_student(
             )
 
         student.full_name = update_data["full_name"].strip()
+
+    if update_data.get("email"):
+        change_email(db, student, update_data["email"])
 
 
     try:

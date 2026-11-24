@@ -32,7 +32,7 @@ from mysite.db.schema import (
     TeacherAssignmentOut,
 )
 from mysite.security.permissions import require_roles
-from mysite.services.accounts import admin_row, create_school_admin, ensure_admin_limit
+from mysite.services.accounts import admin_row, create_school_admin, ensure_admin_limit, change_email, new_parent_code
 from mysite.services.passwords import decrypt_temp_password, set_temp_password
 from mysite.services.school import (
     ADMIN_ROLES,
@@ -142,6 +142,7 @@ def _password_row(user: Users) -> dict:
         "email": user.email,
         "full_name": user.full_name,
         "role": user.role,
+        "parent_code": user.parent_code,
         "is_temp_password": user.is_temp_password,
         # Колдонуучу сыр сөзүн алмаштыргандан кийин убактылуу сыр сөз көрүнбөйт
         "temporary_password": (
@@ -155,15 +156,16 @@ def _passwords_xlsx(title: str, rows: list[dict], filename: str) -> StreamingRes
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = title[:31]
-    sheet.append(["№", "Аты-жөнү", "Логин (почта)", "Убактылуу сыр сөз"])
+    sheet.append(["№", "Аты-жөнү", "Логин (почта)", "Убактылуу сыр сөз", "Ата-эне үчүн код"])
     for number, row in enumerate(rows, start=1):
         sheet.append([
             number,
             row["full_name"],
             row["email"],
             row["temporary_password"] or "өзгөртүлгөн",
+            row.get("parent_code") or "",
         ])
-    for column, width in zip("ABCD", (5, 40, 32, 22)):
+    for column, width in zip("ABCDE", (5, 40, 32, 22, 18)):
         sheet.column_dimensions[column].width = width
 
     output = BytesIO()
@@ -294,6 +296,8 @@ def update_deputy(
         if not update["full_name"] or not update["full_name"].strip():
             raise HTTPException(status_code=400, detail="Аты-жөнү бош болбошу керек")
         deputy.full_name = update["full_name"].strip()
+    if update.get("email"):
+        change_email(db, deputy, update["email"])
 
     db.commit()
     db.refresh(deputy)
@@ -367,7 +371,16 @@ def class_temp_passwords(
     school_class = get_class_or_404(db, class_id, current_user.school_id)
     _ensure_class_access(current_user, school_class)
 
-    rows = [_password_row(s) for s in _class_students(db, school_class)]
+    students = _class_students(db, school_class)
+    # Ата-эне коду класс жетекчи тизмени биринчи ачканда түзүлөт
+    missing_codes = [student for student in students if not student.parent_code]
+    for student in missing_codes:
+        student.parent_code = new_parent_code(db)
+        db.flush()
+    if missing_codes:
+        db.commit()
+
+    rows = [_password_row(s) for s in students]
     if format == "xlsx":
         return _passwords_xlsx(
             class_name(school_class), rows, f"class_{class_id}_passwords.xlsx"
@@ -405,3 +418,25 @@ def class_reset_student_password(
         "full_name": student.full_name,
         "temporary_password": password,
     }
+
+
+# Ата-эне кодун жаңылоо: эски код иштебей калат (мисалы, код бөтөн колго тийсе)
+@classes_router.post("/{class_id}/students/{student_id}/parent-code")
+def class_regenerate_parent_code(
+    class_id: int,
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user: Users = Depends(require_roles(*STAFF_ROLES)),
+):
+    school_class = get_class_or_404(db, class_id, current_user.school_id)
+    _ensure_class_access(current_user, school_class)
+
+    student = next(
+        (s for s in _class_students(db, school_class) if s.id == student_id), None
+    )
+    if student is None:
+        raise HTTPException(status_code=404, detail="Окуучу бул класста табылган жок")
+
+    student.parent_code = new_parent_code(db)
+    db.commit()
+    return {"student_id": student.id, "parent_code": student.parent_code}

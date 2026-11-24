@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from mysite.db.database import get_db
 from mysite.db.models import Users, ParentStudents
 from mysite.db.schema import ParentRegister, ParentAddChild
-from mysite.security.hashing import hash_password, verify_password
+from mysite.security.hashing import hash_password
 from mysite.security.jwt import create_access_token
 from mysite.security import login_limit
 from mysite.security.permissions import (
@@ -38,6 +38,29 @@ def ensure_can_link(db: Session, parent_id, student_id: int) -> None:
             status_code=400,
             detail="Бул окуучуга эки ата-эне байланган — дагы кошууга болбойт"
         )
+
+
+def find_student_by_code(db: Session, code: str, request: Request, school_id=None) -> Users:
+    """Окуучуну ата-эне коду боюнча табат. Кодду тандап табууга каршы IP боюнча чек коюлат."""
+    ip = login_limit.client_ip(request)
+    login_limit.ensure_not_blocked("parent-code", ip)
+
+    query = db.query(Users).filter(
+        Users.parent_code == code,
+        Users.role == "STUDENT",
+        Users.is_active.is_(True)
+    )
+    if school_id is not None:
+        query = query.filter(Users.school_id == school_id)
+    student = query.first()
+
+    if not student:
+        login_limit.record_failure("parent-code", ip)
+        raise HTTPException(
+            status_code=404,
+            detail="Мындай код менен окуучу табылган жок"
+        )
+    return student
 
 
 router = APIRouter(
@@ -77,35 +100,7 @@ def register_parent(
             detail="Бул почта мурда катталган"
         )
 
-    login_limit.ensure_not_blocked(data.student_email, login_limit.client_ip(request))
-
-    student = db.query(Users).filter(
-        Users.email == data.student_email,
-        Users.role == "STUDENT",
-        Users.is_active.is_(True)
-    ).first()
-
-    if not student:
-        raise HTTPException(
-            status_code=404,
-            detail="Окуучу табылган жок"
-        )
-
-    if not student.is_temp_password:
-        raise HTTPException(
-            status_code=400,
-            detail="Окуучунун убактылуу паролу колдонулган"
-        )
-
-    if not verify_password(
-        data.student_password,
-        student.hashed_password
-    ):
-        login_limit.record_failure(data.student_email, login_limit.client_ip(request))
-        raise HTTPException(
-            status_code=400,
-            detail="Окуучунун почтасы же паролу туура эмес"
-        )
+    student = find_student_by_code(db, data.student_code, request)
 
     ensure_can_link(db, None, student.id)
 
@@ -166,36 +161,7 @@ def add_child(
     ),
     db: Session = Depends(get_db)
 ):
-    login_limit.ensure_not_blocked(data.student_email, login_limit.client_ip(request))
-
-    student = db.query(Users).filter(
-        Users.email == data.student_email,
-        Users.role == "STUDENT",
-        Users.school_id == current_user.school_id,
-        Users.is_active.is_(True)
-    ).first()
-
-    if not student:
-        raise HTTPException(
-            status_code=404,
-            detail="Окуучу табылган жок"
-        )
-
-    if not student.is_temp_password:
-        raise HTTPException(
-            status_code=400,
-            detail="Окуучунун убактылуу паролу колдонулган"
-        )
-
-    if not verify_password(
-        data.student_password,
-        student.hashed_password
-    ):
-        login_limit.record_failure(data.student_email, login_limit.client_ip(request))
-        raise HTTPException(
-            status_code=400,
-            detail="Окуучунун почтасы же паролу туура эмес"
-        )
+    student = find_student_by_code(db, data.student_code, request, current_user.school_id)
 
     ensure_can_link(db, current_user.id, student.id)
 

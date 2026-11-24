@@ -165,12 +165,12 @@ def test_parent_and_student_accounts(client):
 
     r = client.post("/parents/register", json={
         "email": "u90000000000201@test.kg", "full_name": "Асанова Назира", "password": "Parent#2026",
-        "student_email": erkin["email"], "student_password": erkin["temporary_password"]})
+        "student_code": erkin["parent_code"]})
     assert r.status_code == 200, r.text
     S["parent"] = r.json()["access_token"]
 
     r = client.post("/parents/add-child", headers=auth(S["parent"]), json={
-        "student_email": bekzat["email"], "student_password": bekzat["temporary_password"]})
+        "student_code": bekzat["parent_code"]})
     assert r.status_code == 200, r.text
 
     S["erkin_id"], S["bekzat_id"] = erkin["id"], bekzat["id"]
@@ -183,13 +183,13 @@ def test_parent_and_student_accounts(client):
 
     # Ошол эле баланы кайра кошууга болбойт
     r = client.post("/parents/add-child", headers=auth(S["parent"]), json={
-        "student_email": bekzat["email"], "student_password": bekzat["temporary_password"]})
+        "student_code": bekzat["parent_code"]})
     assert r.status_code == 400
 
     # Экинчи ата-эне (ата) ошол эле балага байланат, үчүнчүсү — жок
     r = client.post("/parents/register", json={
         "email": "u90000000000202@test.kg", "full_name": "Асанов Бакыт", "password": "Parent#2026",
-        "student_email": bekzat["email"], "student_password": bekzat["temporary_password"]})
+        "student_code": bekzat["parent_code"]})
     assert r.status_code == 200, r.text
     second_parent = r.json()["access_token"]
     r = client.get(f"/journal/summary?student_id={bekzat['id']}", headers=auth(second_parent))
@@ -197,7 +197,7 @@ def test_parent_and_student_accounts(client):
 
     r = client.post("/parents/register", json={
         "email": "u90000000000203@test.kg", "full_name": "Үчүнчү Ата-эне", "password": "Parent#2026",
-        "student_email": bekzat["email"], "student_password": bekzat["temporary_password"]})
+        "student_code": bekzat["parent_code"]})
     assert r.status_code == 400
 
 
@@ -995,4 +995,55 @@ def test_promotion_auto_then_move(client, db):
     r = client.put("/students/promotion/move", headers=h, json={
         "student_id": student_ids["promo.a@test.kg"], "target_academic_year": "2035-2036",
         "grade_number": 7, "letter": "А"})
+    assert r.status_code == 400
+
+
+# =====================================================
+# Ата-эне коду, почтаны алмаштыруу, сыр сөздү калыбына келтирүү
+# =====================================================
+
+def test_parent_code_after_student_changed_password(client):
+    # Эркин сыр сөзүн мурда эле алмаштырган — ата-эне баары бир код менен байланат
+    erkin = S["students"]["u90000000000101@test.kg"]
+    r = client.post("/parents/register", json={
+        "email": "code.parent@test.kg", "full_name": "Коддуу Ата-эне", "password": "Parent#2026",
+        "student_code": erkin["parent_code"].lower()[:4] + "-" + erkin["parent_code"][4:]})
+    assert r.status_code == 200, r.text
+
+    # Кодду жаңыласа, эскиси иштебей калат
+    r = client.post(f"/classes/{S['class']}/students/{erkin['id']}/parent-code", headers=auth(S["teacher"]))
+    assert r.status_code == 200 and r.json()["parent_code"] != erkin["parent_code"]
+    r = client.post("/parents/register", json={
+        "email": "old.code@test.kg", "full_name": "Эски Код", "password": "Parent#2026",
+        "student_code": erkin["parent_code"]})
+    assert r.status_code == 404
+
+
+def test_change_email_and_reset_password(client, db):
+    from mysite.api.auth import create_reset_token
+
+    h = auth(S["director"])
+    aidana_id = S["aidana_id"]
+    r = client.put(f"/students/{aidana_id}", headers=h, json={"email": "Aidana.New@Test.kg"})
+    assert r.status_code == 200, r.text
+    # Бош эмес почтага алмаштырууга болбойт
+    r = client.put(f"/students/{aidana_id}", headers=h, json={"email": "u90000000000101@test.kg"})
+    assert r.status_code == 400
+
+    aidana = db.query(Users).filter(Users.id == aidana_id).first()
+    assert aidana.email == "aidana.new@test.kg"
+
+    # Белгисиз почтага да жооп бирдей
+    assert client.post("/auth/forgot-password", json={"email": "nobody@test.kg"}).status_code == 200
+    assert client.post("/auth/forgot-password", json={"email": "aidana.new@test.kg"}).status_code == 200
+
+    token = create_reset_token(aidana)
+    # Шилтеменин токени менен API'ге кирүүгө болбойт
+    assert client.get("/me", headers=auth(token)).status_code == 401
+
+    r = client.post("/auth/reset-password", json={"token": token, "new_password": "Reset#2026"})
+    assert r.status_code == 200, r.text
+    assert login(client, "aidana.new@test.kg", "Reset#2026")["requires_password_change"] is False
+    # Шилтеме бир гана жолу иштейт
+    r = client.post("/auth/reset-password", json={"token": token, "new_password": "Again#2026"})
     assert r.status_code == 400

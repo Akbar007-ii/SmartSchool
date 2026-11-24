@@ -274,12 +274,26 @@ class StudentUpdate(BaseModel):
         min_length=3,
         max_length=200
     )
+    email: Optional[str] = None
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, value):
+        return value if value is None else normalize_email(value)
 
     @field_validator("full_name")
     @classmethod
     def check_full_name(cls, value):
         return value if value is None else validate_person_name(value)
 
+
+
+def normalize_parent_code(value: str) -> str:
+    """Ата-эне коду: «k7p2-mx4q» → «K7P2MX4Q» (дефис жана боштуктар маанилүү эмес)."""
+    code = "".join(value.split()).replace("-", "").upper()
+    if not 6 <= len(code) <= 12 or not code.isalnum():
+        raise ValueError("Код туура эмес")
+    return code
 
 
 class ParentRegister(BaseModel):
@@ -292,13 +306,17 @@ class ParentRegister(BaseModel):
     def check_full_name(cls, value):
         return value if value is None else validate_person_name(value)
 
-    student_email: str
-    student_password: str = Field(min_length=1)
+    student_code: str
 
-    @field_validator("email", "student_email")
+    @field_validator("email")
     @classmethod
     def check_email(cls, value):
         return normalize_email(value)
+
+    @field_validator("student_code")
+    @classmethod
+    def check_code(cls, value):
+        return normalize_parent_code(value)
 
 
 class ParentLinkStudent(BaseModel):
@@ -312,13 +330,26 @@ class ParentLinkStudent(BaseModel):
         return normalize_email(value)
 
 class ParentAddChild(BaseModel):
-    student_email: str
-    student_password: str = Field(min_length=1)
+    student_code: str
 
-    @field_validator("student_email")
+    @field_validator("student_code")
+    @classmethod
+    def check_code(cls, value):
+        return normalize_parent_code(value)
+
+
+class ForgotPassword(BaseModel):
+    email: str
+
+    @field_validator("email")
     @classmethod
     def check_email(cls, value):
         return normalize_email(value)
+
+
+class ResetPassword(BaseModel):
+    token: str = Field(min_length=10)
+    new_password: str = Field(min_length=8, max_length=128)
 
 class ClassTeacherAssign(BaseModel):
     teacher_id: Optional[int] = None
@@ -431,6 +462,7 @@ class OlympiadAutoSelect(BaseModel):
 
 class ProfileUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
+    email_notifications: Optional[bool] = None
 
     @field_validator("full_name")
     @classmethod
@@ -449,6 +481,12 @@ class PasswordChange(BaseModel):
 
 class TeacherUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
+    email: Optional[str] = None
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, value):
+        return value if value is None else normalize_email(value)
 
     @field_validator("full_name")
     @classmethod
@@ -510,8 +548,13 @@ class SchoolAdminCreate(BaseModel):
 
 
 class SchoolAdminUpdate(BaseModel):
-    # Почта (логин) өзгөрбөйт; аты-жөнү гана
     full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
+    email: Optional[str] = None
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, value):
+        return value if value is None else normalize_email(value)
 
     @field_validator("full_name")
     @classmethod

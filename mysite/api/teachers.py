@@ -19,6 +19,7 @@ from mysite.db.database import get_db
 from mysite.db.models import Classes, TeacherAssignments, Users
 from mysite.db.schema import TeacherUpdate
 from mysite.security.permissions import require_roles
+from mysite.services.accounts import change_email
 from mysite.services.school import ADMIN_ROLES, TEACHER_ROLES, class_name
 
 router = APIRouter(prefix="/teachers", tags=["Teachers"])
@@ -122,6 +123,8 @@ def update_teacher(
 
     if update.get("full_name"):
         teacher.full_name = update["full_name"].strip()
+    if update.get("email"):
+        change_email(db, teacher, update["email"])
 
     db.commit()
     db.refresh(teacher)

@@ -125,6 +125,18 @@ class Users(Base):
 
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
 
+    # Окуучунун ата-энеси үчүн код: ата-эне аны менен баланы өз аккаунтуна байлайт.
+    # Класс жетекчи логиндер тизмесин биринчи ачканда түзүлөт.
+    parent_code: Mapped[Optional[str]] = mapped_column(String(12), unique=True, nullable=True)
+
+    # Билдирүүлөрдү почтага да жөнөтүү (колдонуучу профилинде өчүрө алат)
+    email_notifications: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default="true",
+        nullable=False
+    )
+
     # Убактылуу сыр сөз шифрленген түрдө (Fernet) гана сакталат жана
     # колдонуучу биринчи жолу сыр сөзүн алмаштырганда өчүрүлөт.
     temp_password_encrypted: Mapped[Optional[str]] = mapped_column(

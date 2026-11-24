@@ -30,6 +30,7 @@ def base_profile(user: Users) -> dict:
         "avatar_url": user.avatar_url,
         "school_id": user.school_id,
         "is_temp_password": user.is_temp_password,
+        "email_notifications": user.email_notifications,
     }
 
 
@@ -106,6 +107,9 @@ def update_me(
                 detail="Аты-жөнүңүздү завуч гана өзгөртө алат",
             )
         current_user.full_name = update["full_name"].strip()
+
+    if update.get("email_notifications") is not None:
+        current_user.email_notifications = update["email_notifications"]
 
 
     db.commit()
