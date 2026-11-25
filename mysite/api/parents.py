@@ -10,7 +10,7 @@ from mysite.db.database import get_db
 from mysite.db.models import Users, ParentStudents
 from mysite.db.schema import ParentRegister, ParentAddChild
 from mysite.security.hashing import hash_password
-from mysite.security.jwt import create_access_token
+from mysite.security.jwt import create_access_token, password_fingerprint
 from mysite.security import login_limit
 from mysite.security.permissions import (
     get_current_user,
@@ -81,7 +81,8 @@ def get_parent_token(parent):
     return create_access_token({
         "sub": str(parent.id),
         "school_id": parent.school_id,
-        "role": parent.role
+        "role": parent.role,
+        "pwd": password_fingerprint(parent.hashed_password),
     })
 
 

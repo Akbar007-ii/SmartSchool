@@ -1,8 +1,8 @@
 import os
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -10,11 +10,26 @@ from mysite.api import (auth,schools,users,classes,subjects,teacher_assignments,
                         student_import,students,student_promotion,parents,
                         admin,excel_templates,journal,homeworks,absence_requests,
                         ratings,olympiad,me,announcements,notifications,public,teachers,
-                        schedule,system)
+                        schedule,system,programs)
 from mysite.db.database import get_db
-from mysite.services.files import MEDIA_ROOT, MEDIA_URL
+from mysite.security import login_limit
+from mysite.services.files import MEDIA_ROOT, MEDIA_URL, ProtectedMediaFiles
 
 app = FastAPI(title="Smart School API",description="Smart School Backend System",version="2.0.0")
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    # PROXY_SECRET коюлса, API'ге сайттын прокси аркылуу гана кирүүгө болот:
+    # түз IP дарек менен келген суроолор (кол менен тандап табуу, IP жасалмалоо) жабылат.
+    # /health — Docker'дин текшерүүсү үчүн ачык.
+    if login_limit.PROXY_SECRET and request.url.path != "/health" and not login_limit.is_trusted_proxy(request):
+        return JSONResponse({"detail": "Forbidden"}, status_code=403)
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    return response
 
 # CORS: фронтенддин даректери .env файлында CORS_ORIGINS аркылуу берилет
 # (үтүр менен бөлүнгөн), мис: CORS_ORIGINS=https://smartschool.kg,http://localhost:3000
@@ -37,7 +52,8 @@ app.add_middleware(
 
 # Жүктөлгөн сүрөттөр жана файлдар (үй тапшырма, баннер, аватар)
 MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
-app.mount(MEDIA_URL, StaticFiles(directory=MEDIA_ROOT), name="media")
+# Үй тапшырмалардын файлдары кол коюлган шилтеме менен гана ачылат (services/files.py)
+app.mount(MEDIA_URL, ProtectedMediaFiles(directory=MEDIA_ROOT), name="media")
 
 app.include_router(auth.router)
 app.include_router(me.router)
@@ -66,6 +82,7 @@ app.include_router(student_promotion.router)
 app.include_router(student_import.router)
 app.include_router(students.router)
 app.include_router(parents.router)
+app.include_router(programs.router)
 
 
 @app.get("/", tags=["Health"])

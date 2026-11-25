@@ -32,14 +32,31 @@ def normalize_email(value: str) -> str:
     return email
 
 
+# Эң көп колдонулган жана оңой табылуучу сыр сөздөр (кичине тамгалар менен салыштырылат)
+COMMON_PASSWORDS = {
+    "password", "password1", "qwerty123", "qwertyui", "12345678", "123456789", "1234567890",
+    "11111111", "00000000", "87654321", "abcd1234", "1q2w3e4r", "qwerty12", "admin123",
+    "parol123", "mektep123", "school123", "smartschool", "iloveyou",
+}
+
+
+def validate_new_password(value: str) -> str:
+    """Жаңы сыр сөз: кеминде 8 белги, тамга да, сан да болсун, белгилүү жөнөкөй сыр сөз эмес."""
+    if len(value) < 8:
+        raise ValueError("Сыр сөз кеминде 8 белгиден турушу керек")
+    if not any(char.isalpha() for char in value) or not any(char.isdigit() for char in value):
+        raise ValueError("Сыр сөздө тамга да, сан да болушу керек")
+    if value.lower() in COMMON_PASSWORDS or len(set(value)) < 4:
+        raise ValueError("Бул сыр сөз өтө жөнөкөй — башкасын ойлоп табыңыз")
+    return value
+
+
 class BaseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class SchoolCreate(BaseModel):
     name: str = Field(min_length=2, max_length=200)
     email: Optional[str] = None
-    logo_url: Optional[str] = None
-    banner_url: Optional[str] = None
     director_name: Optional[str] = None
 
     @field_validator("name")
@@ -60,8 +77,6 @@ class SchoolUpdate(BaseModel):
         max_length=200
     )
     email: Optional[str] = None
-    logo_url: Optional[str] = None
-    banner_url: Optional[str] = None
     director_name: Optional[str] = None
 
     @field_validator("name")
@@ -127,7 +142,7 @@ class UserUpdate(BaseModel):
 
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254)
-    password: str = Field(min_length=1)
+    password: str = Field(min_length=1, max_length=128)
 
     @field_validator("email")
     @classmethod
@@ -136,8 +151,13 @@ class LoginRequest(BaseModel):
 
 
 class FirstLoginChange(BaseModel):
-    current_password: str
-    new_password: str = Field(min_length=8)
+    current_password: str = Field(max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def check_new_password(cls, value):
+        return validate_new_password(value)
 
 
 class TokenResponse(BaseModel):
@@ -299,7 +319,12 @@ def normalize_parent_code(value: str) -> str:
 class ParentRegister(BaseModel):
     email: str
     full_name: str = Field(min_length=3, max_length=200)
-    password: str = Field(min_length=8)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, value):
+        return validate_new_password(value)
 
     @field_validator("full_name")
     @classmethod
@@ -348,8 +373,13 @@ class ForgotPassword(BaseModel):
 
 
 class ResetPassword(BaseModel):
-    token: str = Field(min_length=10)
+    token: str = Field(min_length=10, max_length=2000)
     new_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def check_new_password(cls, value):
+        return validate_new_password(value)
 
 class ClassTeacherAssign(BaseModel):
     teacher_id: Optional[int] = None
@@ -479,8 +509,13 @@ class ProfileUpdate(BaseModel):
 
 
 class PasswordChange(BaseModel):
-    current_password: str = Field(min_length=1)
+    current_password: str = Field(min_length=1, max_length=128)
     new_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def check_new_password(cls, value):
+        return validate_new_password(value)
 
 
 # =====================================================

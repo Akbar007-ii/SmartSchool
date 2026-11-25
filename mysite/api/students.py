@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from mysite.db.schema import StudentUpdate
 from mysite.services.accounts import change_email, new_parent_code, send_welcome_email
+from mysite.services.school import ensure_can_view_student
 
 from mysite.db.database import get_db
 from mysite.db.models import (
@@ -60,7 +61,8 @@ def get_students(
 @router.get("/class/{class_id}")
 def get_class_students(
     class_id: int,
-    current_user: Users = Depends(get_current_user),
+    # Тизмеде окуучулардын почталары бар — окуучуларга жана ата-энелерге жабык
+    current_user: Users = Depends(require_roles("DIRECTOR", "DEPUTY", "TEACHER", "CLASS_TEACHER")),
     db: Session = Depends(get_db)
 ):
     school_class = db.query(Classes).filter(
@@ -119,6 +121,8 @@ def get_student(
             status_code=404,
             detail="Окуучу табылган жок"
         )
+
+    ensure_can_view_student(db, current_user, student)
 
     enrollments = db.query(StudentEnrollments).filter(
         StudentEnrollments.student_id == student.id
@@ -337,6 +341,8 @@ def get_student_history(
             status_code=404,
             detail="Окуучу табылган жок"
         )
+
+    ensure_can_view_student(db, current_user, student)
 
     enrollments = db.query(
         StudentEnrollments

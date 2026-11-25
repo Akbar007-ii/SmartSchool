@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from mysite.db.database import get_db
 from mysite.db.models import Users, ParentStudents, Schools
-from mysite.security.jwt import verify_access_token
+from mysite.security.jwt import password_fingerprint, verify_access_token
 
 
 oauth2_scheme = OAuth2PasswordBearer(
@@ -59,6 +59,10 @@ def get_current_user(
         raise credentials_error
 
     if user.role != token_role:
+        raise credentials_error
+
+    # Сыр сөз алмашкандан (же жетекчи кайра койгондон) кийин эски токендер иштебейт
+    if payload.get("pwd") != password_fingerprint(user.hashed_password):
         raise credentials_error
 
     # SYSTEM_ADMINден башка бардык колдонуучулар

@@ -138,7 +138,9 @@ async def import_teachers_excel(
             detail="Excel файлы .xlsx форматында болушу керек"
         )
 
-    content = await file.read()
+    content = await file.read(5 * 1024 * 1024 + 1)
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Файл 5 МБдан ашпашы керек")
 
     try:
         workbook = load_workbook(

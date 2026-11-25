@@ -21,7 +21,7 @@ from mysite.db.models import (
     Users,
 )
 from mysite.security.permissions import get_current_user, require_roles
-from mysite.services.files import delete_media, is_image_url, save_upload
+from mysite.services.files import delete_media, is_image_url, save_upload, sign_media_url, strip_signature
 from mysite.services.notifications import notify
 from mysite.services.text_checks import check_form_texts
 from mysite.services.school import (
@@ -53,8 +53,8 @@ def serialize(hw: Homeworks, submission: Optional[HomeworkSubmissions] = None) -
         "teacher_name": a.teacher.full_name if a.teacher else None,
         "title": hw.title,
         "description": hw.description,
-        "image_urls": hw.image_urls or [],
-        "file_urls": hw.file_urls or [],
+        "image_urls": [sign_media_url(url) for url in hw.image_urls or []],
+        "file_urls": [sign_media_url(url) for url in hw.file_urls or []],
         "due_date": hw.due_date,
         "created_at": hw.created_at,
     }
@@ -69,7 +69,7 @@ def serialize_submission(sub: HomeworkSubmissions) -> dict:
         "homework_id": sub.homework_id,
         "student_id": sub.student_id,
         "text": sub.text,
-        "file_urls": sub.file_urls or [],
+        "file_urls": [sign_media_url(url) for url in sub.file_urls or []],
         "submitted_at": sub.submitted_at,
     }
 
@@ -338,6 +338,8 @@ def remove_homework_file(
 ):
     hw = get_homework_or_404(db, homework_id, current_user.school_id)
     ensure_owner(current_user, hw)
+    # Фронтенд кол коюлган шилтемени жөнөтөт — базада ал колсуз сакталган
+    url = strip_signature(url)
 
     images = list(hw.image_urls or [])
     documents = list(hw.file_urls or [])

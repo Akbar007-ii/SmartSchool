@@ -11,7 +11,7 @@ from mysite.db.schema import ForgotPassword, LoginRequest, FirstLoginChange, Res
 
 from mysite.security.hashing import verify_password,hash_password
 
-from mysite.security.jwt import ALGORITHM, SECRET_KEY, create_access_token
+from mysite.security.jwt import ALGORITHM, SECRET_KEY, create_access_token, password_fingerprint
 from mysite.services.mailer import FRONTEND_URL, send_email
 from mysite.security import login_limit
 from mysite.security.permissions import get_current_user
@@ -37,7 +37,8 @@ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     access_token = create_access_token({
         "sub": str(user.id),
         "school_id": user.school_id,
-        "role": user.role
+        "role": user.role,
+        "pwd": password_fingerprint(user.hashed_password),
     })
 
     return {
@@ -68,7 +69,8 @@ def first_login_change(data: FirstLoginChange,current_user: Users = Depends(get_
     access_token = create_access_token({
         "sub": str(current_user.id),
         "school_id": current_user.school_id,
-        "role": current_user.role
+        "role": current_user.role,
+        "pwd": password_fingerprint(current_user.hashed_password),
     })
 
     return {
@@ -88,7 +90,7 @@ RESET_TOKEN_MINUTES = 30
 
 def _password_fingerprint(user: Users) -> str:
     # Сыр сөз алмашканда шилтеме жараксыз болот (бир жолу гана иштейт)
-    return hashlib.sha256(user.hashed_password.encode()).hexdigest()[:16]
+    return password_fingerprint(user.hashed_password)
 
 
 def create_reset_token(user: Users) -> str:

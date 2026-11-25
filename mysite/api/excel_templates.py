@@ -66,3 +66,40 @@ def teachers_template(
         ["maria.ivanova@gmail.com", "Иванова Мария Петровна"],
         "teachers_template.xlsx",
     )
+
+
+PROGRAM_HEADERS = ["Бөлүм", "Тема", "Саат", "Апта", "Максаттар", "Материалдар"]
+
+
+@router.get("/program")
+def program_template(
+    current_user: Users = Depends(require_roles("DIRECTOR", "DEPUTY")),
+):
+    """Окуу программасынын үлгүсү: ар бир сап — бир тема."""
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Программа"
+    sheet.append(PROGRAM_HEADERS)
+    for cell in sheet[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1D4ED8")
+    for row in (
+        ["Сандар жана туюнтмалар", "Квадраттык теңдемелер", 2, 1,
+         "Квадраттык теңдемени чыгара алат", "Окуу китеби, 12–18-беттер"],
+        ["Сандар жана туюнтмалар", "Виет теоремасы", 1, 2,
+         "Тамырлардын касиеттерин колдонот", "https://example.com/video"],
+        ["Функциялар", "Квадраттык функция жана анын графиги", 3, 3, "", ""],
+    ):
+        sheet.append(row)
+    for column, width in zip("ABCDEF", (26, 40, 8, 8, 40, 40)):
+        sheet.column_dimensions[column].width = width
+    sheet.freeze_panes = "A2"
+
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type=XLSX_MEDIA_TYPE,
+        headers={"Content-Disposition": 'attachment; filename="program_template.xlsx"'},
+    )

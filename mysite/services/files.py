@@ -78,3 +78,58 @@ def delete_media(url: str | None) -> None:
     path = (MEDIA_ROOT / url[len(MEDIA_URL) + 1:]).resolve()
     if MEDIA_ROOT.resolve() in path.parents and path.is_file():
         path.unlink(missing_ok=True)
+
+
+# =====================================================
+# Үй тапшырмалардын файлдары — кол коюлган шилтемелер менен гана
+# =====================================================
+# Мугалимдин тапшырма файлдары жана окуучулардын жооптору жеке маалымат. Шилтемени API
+# укугу бар колдонуучуга гана берет; ага мөөнөт жана кол (HMAC) кошулат. Мөөнөтү өткөн
+# же колу жок шилтеме 404 кайтарат — шилтемени башка бирөөгө жөнөтсө, бир аздан кийин иштебейт.
+import hashlib  # noqa: E402
+import hmac  # noqa: E402
+import time  # noqa: E402
+from urllib.parse import parse_qs  # noqa: E402
+
+from starlette.responses import PlainTextResponse  # noqa: E402
+from starlette.staticfiles import StaticFiles  # noqa: E402
+
+PROTECTED_FOLDERS = ("homeworks/", "submissions/")
+SIGNED_URL_SECONDS = 6 * 60 * 60
+
+
+def _signature(path: str, expires: int) -> str:
+    key = (os.getenv("SECRET_KEY") or "").encode()
+    return hmac.new(key, f"{path}|{expires}".encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def sign_media_url(url: str) -> str:
+    """/media/homeworks/1/a.pdf → /media/homeworks/1/a.pdf?exp=...&sig=... (корголгон папкалар үчүн)."""
+    path = url[len(MEDIA_URL) + 1:] if url.startswith(MEDIA_URL + "/") else ""
+    if not path.startswith(PROTECTED_FOLDERS):
+        return url
+    # Шилтеме бир саатка тегеректелет: браузер файлды кэштен ала алат
+    expires = (int(time.time()) // 3600 + 1) * 3600 + SIGNED_URL_SECONDS
+    return f"{url}?exp={expires}&sig={_signature(path, expires)}"
+
+
+def strip_signature(url: str) -> str:
+    return url.split("?", 1)[0]
+
+
+class ProtectedMediaFiles(StaticFiles):
+    """Кадимки /media, бирок үй тапшырма папкалары туура кол коюлган шилтеме менен гана ачылат."""
+
+    async def get_response(self, path: str, scope):
+        normalized = path.replace("\\", "/").lstrip("/")
+        if normalized.startswith(PROTECTED_FOLDERS):
+            query = parse_qs(scope.get("query_string", b"").decode())
+            try:
+                expires = int(query.get("exp", ["0"])[0])
+            except ValueError:
+                expires = 0
+            signature = query.get("sig", [""])[0]
+            valid = expires > time.time() and hmac.compare_digest(signature, _signature(normalized, expires))
+            if not valid:
+                return PlainTextResponse("Not Found", status_code=404)
+        return await super().get_response(path, scope)

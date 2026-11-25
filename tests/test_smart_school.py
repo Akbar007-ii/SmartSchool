@@ -635,7 +635,9 @@ def test_portal_announcements_profile(client):
     r = client.post(f"/classes/{S['class']}/students/{S['erkin_id']}/reset-password",
                     headers=auth(S["teacher"]))
     assert r.status_code == 200
-    assert login(client, "u90000000000101@test.kg", r.json()["temporary_password"])["requires_password_change"]
+    # Сыр сөз жаңыланды — эски токен иштебейт, окуучу кайра кирип, сыр сөзүн алмаштырат
+    assert client.get("/me", headers=auth(S["erkin"])).status_code == 401
+    S["erkin"] = login_and_change(client, "u90000000000101@test.kg", r.json()["temporary_password"])
 
 
 # =====================================================
@@ -862,7 +864,11 @@ def test_system_admin(client, db):
         "email": "u90000000000303@test.kg", "full_name": "Дагы Завуч"}).status_code == 403
     assert client.get("/admin/deputies", headers=dep).json()[0]["temporary_password"] is None
     # Директор завучтун сыр сөзүн жаңырта алат
-    assert client.post(f"/admin/users/{deputy_id}/reset-password", headers=d3).status_code == 200
+    r = client.post(f"/admin/users/{deputy_id}/reset-password", headers=d3)
+    assert r.status_code == 200
+    # Эски сессия жабылды — завуч жаңы убактылуу сыр сөз менен кайра кирет
+    assert client.get("/me", headers=dep).status_code == 401
+    dep = auth(login_and_change(client, "u90000000000302@test.kg", r.json()["temporary_password"]))
 
     # Мектепти жабуу: колдонуучулары кире албайт
     assert client.post(f"/system/schools/{new_school}/deactivate", headers=sa).status_code == 200
@@ -876,6 +882,7 @@ def test_system_admin(client, db):
     assert client.post(f"/admin/users/{d3_id}/reset-password", headers=dep).status_code == 400
     r = client.post(f"/system/users/{d3_id}/reset-password", headers=sa)
     assert r.status_code == 200 and r.json()["temporary_password"]
+    d3 = auth(login_and_change(client, "u90000000000301@test.kg", r.json()["temporary_password"]))
 
     # Бар мектепке кошумча директор/завуч
     r = client.post(f"/system/schools/{S['school']}/admins", headers=sa, json={
@@ -1064,3 +1071,199 @@ def test_new_student_has_parent_code_and_banner_position_saved(client, db):
     assert client.put("/me", headers=h, json={"banner_position": {"url": "/x.png", "x": 150, "y": 0}}).status_code == 422
     r = client.put("/me", headers=h, json={"banner_position": None})
     assert r.json()["banner_position"] is None
+
+
+# =====================================================
+# Окуу программасы
+# =====================================================
+
+def program_excel(rows):
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Бөлүм", "Тема", "Саат", "Апта", "Максаттар", "Материалдар"])
+    for row in rows:
+        ws.append(row)
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_curriculum_program(client):
+    h = auth(S["director"])
+    t = auth(S["teacher"])
+    first = client.get("/programs", headers=t).json()["items"][0]
+    subject_id, class_id, grade = first["subject_id"], first["class_id"], first["grade_number"]
+    assert first["has_program"] is False
+
+    # Ката бар файл эч нерсени өзгөртпөйт
+    r = client.post("/programs/import", headers=h, data={"subject_id": subject_id, "grade_number": grade},
+                    files={"file": ("p.xlsx", program_excel([["Бөлүм", "", 1, 1, "", ""]]), XLSX)})
+    assert r.status_code == 400
+
+    r = client.post("/programs/import", headers=h, data={"subject_id": subject_id, "grade_number": grade},
+                    files={"file": ("p.xlsx", program_excel([
+                        ["Кириш", "Биринчи тема", 2, 1, "Максат", "Китеп"],
+                        ["Кириш", "Экинчи тема", 1, 2, None, None],
+                    ]), XLSX)})
+    assert r.status_code == 200 and r.json()["topics_count"] == 2, r.text
+
+    # Мугалим өз класстарын жана программасын көрөт
+    cards = client.get("/programs", headers=t).json()["items"]
+    card = next(c for c in cards if c["subject_id"] == subject_id and c["class_id"] == class_id)
+    assert card["has_program"] and card["total"] == 2 and card["done"] == 0
+
+    url = f"/programs/class/{class_id}/subject/{subject_id}"
+    topics = client.get(url, headers=t).json()["topics"]
+    r = client.put(f"{url}/topics/{topics[0]['id']}", headers=t, json={"done": True, "note": "Жакшы өттү"})
+    assert r.status_code == 200 and r.json()["done_on"]
+    assert client.get(url, headers=t).json()["topics"][0]["note"] == "Жакшы өттү"
+
+    # Бул классты окутпаган мугалим жана окуучу белгилей албайт
+    assert client.put(f"{url}/topics/{topics[0]['id']}", headers=auth(S["teacher2"]), json={"done": True}).status_code in (401, 403)
+    assert client.get(url, headers=auth(S["erkin"])).status_code == 403
+
+    r = client.put(f"{url}/topics/{topics[0]['id']}", headers=t, json={"done": False})
+    assert r.status_code == 200 and r.json()["done_on"] is None
+
+    assert client.get("/admin/excel/templates/program", headers=h).content[:2] == b"PK"
+
+
+# =====================================================
+# Хакердин көз карашы: башка мектептин жана башка ролдун маалыматына жетүү аракеттери
+# =====================================================
+
+def test_attacker_cannot_reach_foreign_data(client):
+    d = auth(S["director"])
+    ids = {
+        "class": S["class"],
+        "student": S["bekzat_id"],
+        "teacher": S["teacher_id"],
+        "subject": client.get("/subjects/", headers=d).json()[0]["id"],
+        "assignment": S["assignment"],
+        "request": S["request"],
+        "announcement": (client.get("/announcements", headers=d).json() or [{"id": 999999}])[0]["id"],
+        "homework": (client.get("/homeworks", headers=d).json() or [{"id": 999999}])[0]["id"],
+        "notification": 1,
+    }
+    lessons = client.get(f"/schedule/class/{ids['class']}", headers=d).json()
+    ids["lesson"] = lessons[0]["id"] if isinstance(lessons, list) and lessons else 999999
+
+    probes = [
+        ("get", "/classes/{class}"), ("put", "/classes/{class}"), ("delete", "/classes/{class}"),
+        ("put", "/classes/{class}/class-teacher"), ("get", "/classes/{class}/temp-passwords"),
+        ("post", "/classes/{class}/students/{student}/reset-password"),
+        ("post", "/classes/{class}/students/{student}/parent-code"),
+        ("get", "/students/{student}"), ("put", "/students/{student}"), ("delete", "/students/{student}"),
+        ("get", "/students/{student}/history"), ("get", "/students/class/{class}"),
+        ("get", "/profiles/students/{student}"), ("get", "/teachers/{teacher}"), ("put", "/teachers/{teacher}"),
+        ("delete", "/teachers/{teacher}"), ("post", "/teachers/{teacher}/activate"),
+        ("get", "/subjects/{subject}"), ("put", "/subjects/{subject}"), ("delete", "/subjects/{subject}"),
+        ("delete", "/teacher-assignments/{assignment}"), ("get", "/teacher-assignments/teacher/{teacher}"),
+        ("get", "/absence-requests/{request}"), ("post", "/absence-requests/{request}/approve"),
+        ("post", "/absence-requests/{request}/reject"), ("post", "/absence-requests/{request}/cancel"),
+        ("get", "/announcements/{announcement}"), ("put", "/announcements/{announcement}"),
+        ("delete", "/announcements/{announcement}"),
+        ("get", "/homeworks/{homework}"), ("put", "/homeworks/{homework}"), ("delete", "/homeworks/{homework}"),
+        ("get", "/homeworks/{homework}/submissions"),
+        ("get", "/journal/class/{class}"), ("get", "/ratings/class/{class}"),
+        ("get", "/schedule/class/{class}"), ("get", "/schedule/teacher/{teacher}"),
+        ("put", "/schedule/{lesson}"), ("delete", "/schedule/{lesson}"),
+        ("post", "/admin/users/{teacher}/reset-password"), ("get", "/users/{teacher}"),
+        ("post", "/users/{teacher}/reset-password"),
+        ("get", "/programs/class/{class}/subject/{subject}"),
+        ("post", "/notifications/{notification}/read"),
+    ]
+    bodies = {"put": {"full_name": "Бузулду Аты", "name": "Бузулду", "title": "x", "text": "x"}, "post": {}}
+    attackers = {"other_school_director": auth(S["other_director"]), "student": auth(S["erkin"])}
+    # Окуучуга атайын ачык: өз классы, жадыбал, рейтинг жана классташтын рейтинг-профили (почтасыз),
+    # предмет, мугалимдин аты жана жадыбалы. Почталар жана тарых жабык.
+    allowed_for_student = {"/schedule/class/{class}", "/ratings/class/{class}", "/homeworks/{homework}",
+                           "/announcements/{announcement}", "/notifications/{notification}/read",
+                           "/classes/{class}", "/profiles/students/{student}", "/subjects/{subject}",
+                           "/schedule/teacher/{teacher}", "/users/{teacher}"}
+
+    leaks = []
+    for who, headers in attackers.items():
+        for method, template in probes:
+            if who == "student" and template in allowed_for_student:
+                continue
+            path = template.format(**ids)
+            kwargs = {"headers": headers}
+            if method in bodies:
+                kwargs["json"] = bodies[method]
+            response = getattr(client, method)(path, **kwargs)
+            if 200 <= response.status_code < 300:
+                leaks.append(f"{who}: {method.upper()} {path} -> {response.status_code}")
+    assert not leaks, "\n".join(leaks)
+
+
+def test_old_tokens_stop_working_after_password_change(client):
+    # Токен уурдалды дейли: ээси сыр сөзүн алмаштырганда уурдалган токен иштебей калышы керек
+
+    erkin_token = S["erkin"]
+    assert client.get("/me", headers=auth(erkin_token)).status_code == 200
+
+    r = client.post("/me/change-password", headers=auth(erkin_token),
+                    json={"current_password": "NewPass#2026", "new_password": "Changed#2026"})
+    assert r.status_code == 200, r.text
+    assert client.get("/me", headers=auth(erkin_token)).status_code == 401
+
+    S["erkin"] = login(client, "u90000000000101@test.kg", "Changed#2026")["access_token"]
+    assert client.get("/me", headers=auth(S["erkin"])).status_code == 200
+
+    # Логотипти каалаган шилтемеге алмаштырууга болбойт (файл жүктөө гана)
+    client.put("/schools/me", headers=auth(S["director"]), json={"name": "Тест мектеп №1", "logo_url": "https://evil.example/x.png"})
+    assert client.get("/schools/me", headers=auth(S["director"])).json()["logo_url"] != "https://evil.example/x.png"
+
+
+def test_password_edge_cases(client):
+    # Өтө узун сыр сөз сервердин катасына (500) алып келбейт
+    r = client.post("/auth/login", json={"email": "u90000000000101@test.kg", "password": "a" * 100})
+    assert r.status_code in (401, 422)
+    r = client.post("/auth/login", json={"email": "u90000000000101@test.kg", "password": "я" * 60})
+    assert r.status_code == 401
+
+    # Жөнөкөй сыр сөзгө алмаштырууга болбойт
+    h = auth(S["erkin"])
+    for weak in ("12345678", "abcdefgh", "password1", "aaaa1111"):
+        r = client.post("/me/change-password", headers=h,
+                        json={"current_password": "Changed#2026", "new_password": weak})
+        assert r.status_code == 422, (weak, r.text)
+
+
+def test_homework_files_need_signed_link(client):
+    from mysite.services.files import MEDIA_ROOT, sign_media_url
+
+    path = MEDIA_ROOT / "submissions" / "999"
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "work.pdf").write_bytes(b"%PDF-1.4 secret homework")
+    url = "/media/submissions/999/work.pdf"
+
+    # Колсуз жана жасалма кол менен — жок
+    assert client.get(url).status_code == 404
+    assert client.get(url + "?exp=99999999999&sig=0000").status_code == 404
+    # Мөөнөтү өткөн шилтеме — жок
+    signed = sign_media_url(url)
+    expired = signed.replace(signed.split("exp=")[1].split("&")[0], "1000")
+    assert client.get(expired).status_code == 404
+    # API берген шилтеме — ачылат
+    assert client.get(signed).content.startswith(b"%PDF")
+    # Мектептин сүрөттөрү сыяктуу ачык файлдар мурдагыдай ачык
+    assert sign_media_url("/media/avatars/1/a.png") == "/media/avatars/1/a.png"
+
+
+def test_proxy_secret_blocks_direct_access(client, monkeypatch):
+    from mysite.security import login_limit
+
+    monkeypatch.setattr(login_limit, "PROXY_SECRET", "test-proxy-secret")
+    # Түз кирүү (ачкычсыз) жабык, /health ачык
+    assert client.post("/auth/login", json={"email": "a@test.kg", "password": "x"}).status_code == 403
+    assert client.get("/health").status_code == 200
+
+    # Сайт аркылуу: IP Vercel'ден келет, жасалма X-Forwarded-For эсепке алынбайт
+    proxy = {"x-proxy-secret": "test-proxy-secret", "x-client-ip": "203.0.113.7", "x-forwarded-for": "1.2.3.4"}
+    for _ in range(login_limit.MAX_FAILURES_PER_IP):
+        login_limit.record_failure("spray", "203.0.113.7")
+    r = client.post("/auth/login", headers=proxy, json={"email": "new.victim@test.kg", "password": "Wrong#2026"})
+    assert r.status_code == 429
+    login_limit._failures.clear()

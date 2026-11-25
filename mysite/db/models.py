@@ -1010,3 +1010,74 @@ class ScheduleLessons(Base):
         CheckConstraint("start_time < end_time", name="check_schedule_time_order"),
         Index("ix_schedule_school_year_day", "school_id", "academic_year", "weekday"),
     )
+
+
+# =====================================================
+# ОКУУ ПРОГРАММАСЫ (календардык-тематикалык план)
+# =====================================================
+
+class CurriculumPrograms(Base):
+    """Мектептин бир предмет жана параллель боюнча программасы (мисалы, Математика, 9-класс).
+    Параллелдин бардык класстары бир программаны колдонот, бирок прогресс ар бир класста өзүнчө."""
+    __tablename__ = "curriculum_programs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    school_id: Mapped[int] = mapped_column(ForeignKey("schools.id"), nullable=False, index=True)
+    subject_id: Mapped[int] = mapped_column(
+        ForeignKey("subjects.id", ondelete="CASCADE"), nullable=False
+    )
+    grade_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    topics: Mapped[List["CurriculumTopics"]] = relationship(
+        back_populates="program",
+        cascade="all, delete-orphan",
+        order_by="CurriculumTopics.position",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("school_id", "subject_id", "grade_number", name="unique_school_program"),
+        CheckConstraint("grade_number >= 1 AND grade_number <= 11", name="check_program_grade"),
+    )
+
+
+class CurriculumTopics(Base):
+    """Программанын бир темасы: бөлүм, тартиби, саат, пландагы апта, максаттар жана материалдар."""
+    __tablename__ = "curriculum_topics"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    program_id: Mapped[int] = mapped_column(
+        ForeignKey("curriculum_programs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    section: Mapped[Optional[str]] = mapped_column(String(200))
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    hours: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # Окуу жылынын канчанчы аптасында өтүлөт (1 — сентябрдын биринчи аптасы)
+    week: Mapped[Optional[int]] = mapped_column(Integer)
+    goals: Mapped[Optional[str]] = mapped_column(Text)
+    materials: Mapped[Optional[str]] = mapped_column(Text)
+
+    program: Mapped["CurriculumPrograms"] = relationship(back_populates="topics")
+
+
+class CurriculumProgress(Base):
+    """Класс теманы өттү: качан жана мугалимдин эскертмеси."""
+    __tablename__ = "curriculum_progress"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    class_id: Mapped[int] = mapped_column(
+        ForeignKey("classes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    topic_id: Mapped[int] = mapped_column(
+        ForeignKey("curriculum_topics.id", ondelete="CASCADE"), nullable=False
+    )
+    done_on: Mapped[dt_date] = mapped_column(Date, nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(String(500))
+    marked_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+
+    __table_args__ = (
+        UniqueConstraint("class_id", "topic_id", name="unique_class_topic_progress"),
+    )

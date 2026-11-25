@@ -16,6 +16,9 @@ from datetime import timedelta
 
 from mysite.db.database import SessionLocal
 from mysite.db.models import (
+    CurriculumPrograms,
+    CurriculumProgress,
+    CurriculumTopics,
     AbsenceRequests,
     Announcements,
     Classes,
@@ -104,6 +107,29 @@ try:
             db.add(a)
             assignments.append(a)
     db.flush()
+
+    # Окуу программасы: Математика, 11-класс (11-Б классында биринчи темалар өтүлгөн)
+    math_program = CurriculumPrograms(school_id=school.id, subject_id=subjects["Математика"].id, grade_number=11)
+    db.add(math_program)
+    for position, (section, title, hours, week, goals, materials) in enumerate((
+        ("Кайталоо", "10-класстын материалын кайталоо", 2, 1, "Негизги формулаларды эстейт", None),
+        ("Туунду", "Функциянын туундусу", 3, 2, "Туундунун аныктамасын түшүнөт", "Окуу китеби, 5–12-беттер"),
+        ("Туунду", "Туундуларды эсептөө эрежелери", 3, 3, "Суммадан, көбөйтүндүдөн туунду алат", None),
+        ("Туунду", "Туундунун геометриялык мааниси", 2, 5, "Жаныманын теңдемесин түзөт", None),
+        ("Туундунун колдонулушу", "Функциянын өсүшү жана кемиши", 3, 6, "Монотондуулук аралыктарын табат", None),
+        ("Туундунун колдонулушу", "Экстремумдар", 3, 8, "Максимум жана минимум чекиттерин табат", None),
+        ("Интеграл", "Баштапкы функция", 2, 10, "Баштапкы функцияны табат", None),
+        ("Интеграл", "Аныкталган интеграл", 3, 12, "Аянтты интеграл менен эсептейт", None),
+    ), start=1):
+        math_program.topics.append(CurriculumTopics(
+            position=position, section=section, title=title, hours=hours,
+            week=week, goals=goals, materials=materials,
+        ))
+    db.flush()
+    for topic in math_program.topics[:3]:
+        db.add(CurriculumProgress(class_id=class_b.id, topic_id=topic.id,
+                                  done_on=today - timedelta(days=30 - topic.position * 7),
+                                  marked_by=teacher_math.id))
 
     students = {}
     for email, name, school_class in (

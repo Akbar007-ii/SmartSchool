@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 import jwt
@@ -24,6 +25,12 @@ if len(SECRET_KEY.encode()) < 32:
     logging.getLogger(__name__).warning(
         "SECRET_KEY өтө кыска (%s байт). Жаңы орнотууда кеминде 32 байт колдонуңуз", len(SECRET_KEY.encode())
     )
+
+
+def password_fingerprint(hashed_password: str) -> str:
+    """Сыр сөздүн хешинен кыска из. Токенге жазылат: сыр сөз алмашса, эски токендер жараксыз болот
+    (уурдалган токен менен сыр сөздү алмаштыргандан кийин кирүүгө болбойт)."""
+    return hashlib.sha256(hashed_password.encode()).hexdigest()[:16]
 
 
 def create_access_token(data: dict) -> str:
