@@ -29,6 +29,7 @@ from mysite.db.models import (
     Users,
 )
 from mysite.security.hashing import hash_password
+from mysite.services.accounts import new_parent_code
 from mysite.services.rating import recompute_subject_xp, sync_badges
 from mysite.services.timeutils import current_academic_year, now_local
 
@@ -77,7 +78,10 @@ try:
                       class_teacher_id=teacher_kg.id, academic_year=year)
     class_b = Classes(grade_number=11, letter="Б", school_id=school.id,
                       class_teacher_id=teacher_math.id, academic_year=year)
-    db.add_all([class_a, class_b])
+    # 9-А — окуучуларды кийинки класска которууну көрсөтүү үчүн (11-класстар бүтүрүп кетет)
+    class_c = Classes(grade_number=9, letter="А", school_id=school.id,
+                      class_teacher_id=None, academic_year=year)
+    db.add_all([class_a, class_b, class_c])
     db.flush()
 
     subjects = {}
@@ -88,7 +92,7 @@ try:
         subjects[name] = subject
 
     assignments = []
-    for school_class in (class_a, class_b):
+    for school_class in (class_a, class_b, class_c):
         for subject_name, teacher in (
             ("Кыргыз тили", teacher_kg),
             ("Математика", teacher_math),
@@ -109,8 +113,12 @@ try:
         ("nurlan@demo.kg", "Касымов Нурлан", class_b),
         ("adilet@demo.kg", "Жолдошев Адилет", class_b),
         ("ainazik@demo.kg", "Кадырова Айназик", class_b),
+        ("timur@demo.kg", "Осмонов Тимур", class_c),
+        ("saltanat@demo.kg", "Бекова Салтанат", class_c),
+        ("ermek@demo.kg", "Усенов Эрмек", class_c),
     ):
         s = user(email, name, "STUDENT", school.id)
+        s.parent_code = new_parent_code(db)
         db.add(StudentEnrollments(student_id=s.id, class_id=school_class.id,
                                   academic_year=year, status="ACTIVE"))
         students[s.id] = (s, school_class)

@@ -1,0 +1,5 @@
+# Сервердеги cron (crontab -e). Убакыт — сервердин убактысы (UTC); Бишкек = UTC+6.
+# 03:00 Бишкек — базанын резервдик көчүрмөсү
+0 21 * * * /home/ubuntu/SmartSchool/deploy/backup.sh >> /home/ubuntu/backups/backup.log 2>&1
+# 18:00 Бишкек — окулбаган билдирүүлөрдүн жыйынтыгы почтага
+0 12 * * * cd /home/ubuntu/SmartSchool && docker compose exec -T api python send_daily_digest.py >> /home/ubuntu/backups/digest.log 2>&1

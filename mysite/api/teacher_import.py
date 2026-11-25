@@ -14,6 +14,7 @@ from mysite.security.permissions import require_roles
 from mysite.security.hashing import hash_password
 from mysite.services.passwords import encrypt_temp_password, set_temp_password
 from mysite.db.schema import normalize_email
+from mysite.services.accounts import send_welcome_email
 from mysite.services.text_checks import validate_person_name
 
 
@@ -162,6 +163,9 @@ def import_teachers_excel(
             })
 
         db.commit()
+
+        for added in added_teachers:
+            send_welcome_email(added["email"], added["full_name"], added["temporary_password"])
 
     except Exception:
         db.rollback()

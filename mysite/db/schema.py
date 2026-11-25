@@ -460,9 +460,17 @@ class OlympiadAutoSelect(BaseModel):
 # Профиль
 # =====================================================
 
+class BannerPosition(BaseModel):
+    url: str = Field(max_length=500)
+    x: float = Field(ge=0, le=100)
+    y: float = Field(ge=0, le=100)
+
+
 class ProfileUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=3, max_length=200)
     email_notifications: Optional[bool] = None
+    # null — баннер кайра ортого
+    banner_position: Optional[BannerPosition] = None
 
     @field_validator("full_name")
     @classmethod

@@ -1047,3 +1047,20 @@ def test_change_email_and_reset_password(client, db):
     # Шилтеме бир гана жолу иштейт
     r = client.post("/auth/reset-password", json={"token": token, "new_password": "Again#2026"})
     assert r.status_code == 400
+
+
+def test_new_student_has_parent_code_and_banner_position_saved(client, db):
+    h = auth(S["director"])
+    r = client.post("/students/", headers=h, json={
+        "email": "fresh.student@test.kg", "full_name": "Жаңы Окуучу", "class_id": S["class"]})
+    assert r.status_code == 200, r.text
+    student = db.query(Users).filter(Users.id == r.json()["id"]).first()
+    # Код класс жетекчи тизмени ачканга чейин эле бар
+    assert student.parent_code and len(student.parent_code) == 8
+
+    position = {"url": "/media/banner.png", "x": 30, "y": 80}
+    r = client.put("/me", headers=h, json={"banner_position": position})
+    assert r.status_code == 200 and r.json()["banner_position"] == position
+    assert client.put("/me", headers=h, json={"banner_position": {"url": "/x.png", "x": 150, "y": 0}}).status_code == 422
+    r = client.put("/me", headers=h, json={"banner_position": None})
+    assert r.json()["banner_position"] is None

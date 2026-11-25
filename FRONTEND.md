@@ -12,21 +12,22 @@
 
 Сыр сөз бардыгында: **`Demo#2026`**
 
-| Ролу | ИНН (логин) | Аты-жөнү | Эскертүү |
+| Ролу | Почта (логин) | Аты-жөнү | Эскертүү |
 |---|---|---|---|
-| DIRECTOR | `10000000000001` | Асанов Бакыт | Админ-панель |
-| DEPUTY | `10000000000002` | Сыдыкова Айгүл | Завуч, директор сыяктуу админ-панель. Демо-маалымат ушул өзгөртүүдөн мурда жүктөлгөн серверде жок — директор `POST /admin/deputies` менен кошот |
-| TEACHER | `10000000000010` | Иванова Мария Петровна | 11-А класс жетекчи, Кыргыз тили |
-| TEACHER | `10000000000011` | Сапарова Гүлнара | 11-Б класс жетекчи, Математика, Физика |
-| STUDENT | `10000000000101` | Алиев Эркин | 11-А |
-| STUDENT | `10000000000102`…`106` | 5 окуучу | 11-А, 11-Б |
-| PARENT | `10000000000201` | Алиева Назира | Эркин менен Айдананын ата-энеси |
+| DIRECTOR | `director@demo.kg` | Асанов Бакыт | Админ-панель |
+| DEPUTY | `deputy@demo.kg` | Сыдыкова Айгүл | Завуч, директор сыяктуу админ-панель |
+| TEACHER | `teacher.kg@demo.kg` | Иванова Мария Петровна | 11-А класс жетекчи, Кыргыз тили |
+| TEACHER | `teacher.math@demo.kg` | Сапарова Гүлнара | 11-Б класс жетекчи, Математика, Физика |
+| STUDENT | `erkin@demo.kg` | Алиев Эркин | 11-А |
+| STUDENT | `bekzat@`, `aidana@`, `nurlan@`, `adilet@`, `ainazik@demo.kg` | 5 окуучу | 11-А, 11-Б |
+| STUDENT | `timur@`, `saltanat@`, `ermek@demo.kg` | 3 окуучу | 9-А (кийинки класска которуу үчүн) |
+| PARENT | `parent@demo.kg` | Алиева Назира | Эркин менен Айдананын ата-энеси |
 
 ## Авторизация
 
 ```http
 POST /auth/login
-{"inn": "10000000000101", "password": "Demo#2026"}
+{"email": "erkin@demo.kg", "password": "Demo#2026"}
 
 → {"access_token": "eyJ...", "token_type": "bearer", "requires_password_change": false}
 ```
@@ -103,6 +104,9 @@ await fetch(`${BASE_URL}/homeworks`, {method: "POST", headers: {Authorization: `
 | Башкы бет (12 мектеп · 25 000+ окуучу) | `GET /public/stats` |
 | Мектеп тандоо (издөө) | `GET /public/schools?search=` |
 | Мектептин баракчасы | `GET /public/schools/{id}` |
+| Сыр сөздү унуттум | `POST /auth/forgot-password` `{"email"}` → почтага шилтеме (жооп ар дайым 200) |
+| Жаңы сыр сөз (каттагы шилтеме) | `POST /auth/reset-password` `{"token", "new_password"}` (30 мүнөт, бир жолу) |
+| Ата-эненин каттоосу | `POST /parents/register` `{"email", "full_name", "password", "student_code"}` — код класс жетекчиден |
 
 ### Окуучу
 | Экран | Эндпоинт |
@@ -113,7 +117,7 @@ await fetch(`${BASE_URL}/homeworks`, {method: "POST", headers: {Authorization: `
 | Үй тапшырмалар | `GET /homeworks`, `GET /homeworks/{id}` |
 | Тапшырманы тапшыруу | `POST /homeworks/{id}/submit` (form: `text`, `files`) |
 | Рейтинг: класс / параллель / предмет / мектеп | `GET /ratings/class/{class_id}`, `/ratings/parallel/{grade}`, `/ratings/subjects/{id}`, `/ratings/school` |
-| Профиль | `GET /me`, `PUT /me`, `POST /me/avatar`, `POST /me/change-password` |
+| Профиль | `GET /me`, `PUT /me` (`full_name`, `email_notifications`, `banner_position`), `POST /me/avatar`, `POST /me/change-password` |
 | Жарыялар | `GET /announcements` |
 | 🔔 Билдирүүлөр | `GET /notifications/unread-count`, `GET /notifications`, `POST /notifications/{id}/read`, `POST /notifications/read-all` |
 
@@ -126,6 +130,7 @@ await fetch(`${BASE_URL}/homeworks`, {method: "POST", headers: {Authorization: `
 |---|---|
 | Баланын жыйынтыгы, өсүү темпи | `GET /journal/summary?student_id=` (`subjects[].trend` — айлык орточо) |
 | Баланын профили | `GET /profiles/students/{id}` |
+| Дагы бир баланы кошуу | `POST /parents/add-child` `{"student_code"}` |
 | **Сабактан сурануу** | см. төмөн |
 
 ### Сабактан сурануу (ата-эне гана)
@@ -163,21 +168,22 @@ await fetch(`${BASE_URL}/homeworks`, {method: "POST", headers: {Authorization: `
 | Класстын бир күнү | `GET /journal/class/{class_id}?day=` |
 | Окуучулардын логин/сыр сөздөрү | `GET /classes/{id}/temp-passwords` (`?format=xlsx` — Excel файл) |
 | Окуучунун сыр сөзүн жаңыртуу | `POST /classes/{id}/students/{sid}/reset-password` |
+| Ата-эне коду (`parent_code` логиндер тизмесинде) | жаңы код: `POST /classes/{id}/students/{sid}/parent-code` |
 
 ### Платформанын администратору (`SYSTEM_ADMIN`)
 
-Кирүү — башкалар сыяктуу ИНН жана сыр сөз менен. Биринчи администратор серверде скрипт менен түзүлөт
+Кирүү — башкалар сыяктуу почта жана сыр сөз менен. Биринчи администратор серверде скрипт менен түзүлөт
 (`create_system_admin.py`, DEPLOY.md'ни караңыз). Бардык эндпоинттер башка ролдор үчүн `403`.
 
 | Экран | Эндпоинт |
 |---|---|
 | Платформанын статистикасы | `GET /system/stats` → `schools, active_schools, directors, deputies, teachers, students, parents` |
 | Мектептердин тизмеси | `GET /system/schools?search=&include_inactive=true` — ар биринде `stats` (`students, teachers, classes`), `is_active` |
-| Мектеп кошуу (директору менен) | `POST /system/schools` `{"name", "address"?, "phone"?, "email"?, "director": {"inn", "full_name", "phone"?}}` → `director.temporary_password` |
+| Мектеп кошуу (директору менен) | `POST /system/schools` `{"name", "email"?, "director": {"email", "full_name"}}` → `director.temporary_password` |
 | Бир мектеп + анын жетекчилери | `GET /system/schools/{id}` → `admins[]` (директор/завуч; сыр сөзүн алмаштыра элек болсо `temporary_password`) |
 | Мектепти өзгөртүү | `PUT /system/schools/{id}` |
 | Мектепти жабуу / ачуу | `POST /system/schools/{id}/deactivate`, `.../activate` — жабык мектептин колдонуучулары кире албайт, маалымат сакталат |
-| Мектепке директор же завуч кошуу | `POST /system/schools/{id}/admins` `{"inn", "full_name", "phone"?, "role": "DIRECTOR" \| "DEPUTY"}` |
+| Мектепке директор же завуч кошуу | `POST /system/schools/{id}/admins` `{"email", "full_name", "role": "DIRECTOR" \| "DEPUTY"}` |
 | Директордун/завучтун сыр сөзүн жаңыртуу | `POST /system/users/{id}/reset-password` |
 | Директорду/завучту өчүрүү / кайра ачуу | `POST /system/users/{id}/deactivate`, `.../activate` |
 
@@ -216,7 +222,7 @@ await fetch(`${BASE_URL}/homeworks`, {method: "POST", headers: {Authorization: `
 | Бирден кошуу | `POST /students/`, `POST /users/create-teacher` |
 | Мугалимдер жана байлоо | `POST /admin/teacher-assignments`, `GET /teacher-assignments/`, `DELETE /teacher-assignments/{id}` |
 | Мугалимдердин сыр сөздөрү | `GET /admin/teachers/temp-passwords` (`?format=xlsx`), `POST /admin/users/{id}/reset-password` (директор завучтун сыр сөзүн да жаңырта алат) |
-| Завучтар | `GET /admin/deputies`; кошуу `POST /admin/deputies` `{"inn", "full_name", "phone"?}` → `temporary_password`; өчүрүү `DELETE /admin/deputies/{id}` — кошуу/өчүрүү директор гана |
+| Завучтар | `GET /admin/deputies`; кошуу `POST /admin/deputies` `{"email", "full_name"}`; почтаны алмаштыруу `PUT /admin/deputies/{id}` `{"email"}` → `temporary_password`; өчүрүү `DELETE /admin/deputies/{id}` — кошуу/өчүрүү директор гана |
 | Суранууларды көзөмөлдөө | `GET /absence-requests` (көрүү гана) |
 | Журналды көрүү | `GET /journal/assignments`, `GET /journal?...` (`can_edit: false`) |
 | Олимпиадалык аналитика | `GET /olympiad/analytics`, `POST /olympiad/auto-select`, `POST /olympiad/candidates/{id}/approve` |

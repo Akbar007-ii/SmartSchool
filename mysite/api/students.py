@@ -4,7 +4,7 @@ import string
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from mysite.db.schema import StudentUpdate
-from mysite.services.accounts import change_email
+from mysite.services.accounts import change_email, new_parent_code, send_welcome_email
 
 from mysite.db.database import get_db
 from mysite.db.models import (
@@ -218,6 +218,7 @@ def create_student(
             hashed_password=hash_password(password),
             temp_password_encrypted=encrypt_temp_password(password),
             is_temp_password=True,
+            parent_code=new_parent_code(db),
             school_id=current_user.school_id,
             is_active=True
         )
@@ -235,6 +236,7 @@ def create_student(
         db.add(enrollment)
         db.commit()
         db.refresh(student)
+        send_welcome_email(student.email, student.full_name, password)
 
         return {
             "message": "Окуучу ийгиликтүү катталды",

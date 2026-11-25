@@ -31,6 +31,7 @@ def base_profile(user: Users) -> dict:
         "school_id": user.school_id,
         "is_temp_password": user.is_temp_password,
         "email_notifications": user.email_notifications,
+        "banner_position": user.banner_position,
     }
 
 
@@ -110,6 +111,9 @@ def update_me(
 
     if update.get("email_notifications") is not None:
         current_user.email_notifications = update["email_notifications"]
+
+    if "banner_position" in update:
+        current_user.banner_position = update["banner_position"]
 
 
     db.commit()

@@ -17,7 +17,7 @@ from mysite.db.database import get_db
 from mysite.db.models import Classes, Schools, Users
 from mysite.db.schema import SchoolAdminWithRole, SchoolUpdate, SystemSchoolCreate
 from mysite.security.permissions import require_roles
-from mysite.services.accounts import admin_row, create_school_admin, ensure_admin_limit
+from mysite.services.accounts import admin_row, create_school_admin, ensure_admin_limit, send_welcome_email
 from mysite.services.passwords import set_temp_password
 from mysite.services.school import ADMIN_ROLES, TEACHER_ROLES
 
@@ -152,6 +152,7 @@ def create_school(
         raise
     db.commit()
     db.refresh(school)
+    send_welcome_email(director.email, director.full_name, password)
 
     return {
         "message": "Мектеп жана директор түзүлдү",
@@ -256,6 +257,7 @@ def add_school_admin(
         raise
     db.commit()
     db.refresh(user)
+    send_welcome_email(user.email, user.full_name, password)
     return {**admin_row(user), "temporary_password": password}
 
 

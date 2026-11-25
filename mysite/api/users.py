@@ -12,6 +12,7 @@ from fastapi import (
     File
 )
 from mysite.db.schema import TeacherCreate,TeacherCreatedOut,normalize_email
+from mysite.services.accounts import send_welcome_email
 
 from fastapi.responses import StreamingResponse
 
@@ -108,6 +109,7 @@ def create_teacher(
     db.add(teacher)
     db.commit()
     db.refresh(teacher)
+    send_welcome_email(teacher.email, teacher.full_name, temporary_password)
 
     return {
         "id": teacher.id,

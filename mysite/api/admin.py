@@ -32,7 +32,7 @@ from mysite.db.schema import (
     TeacherAssignmentOut,
 )
 from mysite.security.permissions import require_roles
-from mysite.services.accounts import admin_row, create_school_admin, ensure_admin_limit, change_email, new_parent_code
+from mysite.services.accounts import admin_row, create_school_admin, ensure_admin_limit, change_email, new_parent_code, send_welcome_email
 from mysite.services.passwords import decrypt_temp_password, set_temp_password
 from mysite.services.school import (
     ADMIN_ROLES,
@@ -265,6 +265,7 @@ def create_deputy(
     )
     db.commit()
     db.refresh(user)
+    send_welcome_email(user.email, user.full_name, password)
     return {**admin_row(user), "temporary_password": password}
 
 

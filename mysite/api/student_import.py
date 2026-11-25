@@ -23,6 +23,7 @@ from mysite.security.permissions import require_roles
 from mysite.security.hashing import hash_password
 from mysite.services.passwords import encrypt_temp_password, set_temp_password
 from mysite.db.schema import normalize_email
+from mysite.services.accounts import new_parent_code, send_welcome_email
 from mysite.services.text_checks import validate_person_name
 
 
@@ -168,6 +169,7 @@ def import_students_excel(
                 hashed_password=hash_password(password),
                 temp_password_encrypted=encrypt_temp_password(password),
                 is_temp_password=True,
+                parent_code=new_parent_code(db),
                 school_id=current_user.school_id,
                 is_active=True
             )
@@ -191,6 +193,9 @@ def import_students_excel(
             })
 
         db.commit()
+
+        for added in added_students:
+            send_welcome_email(added["email"], added["full_name"], added["temporary_password"])
 
         return {
             "message": "Окуучуларды жүктөө аяктады",

@@ -129,7 +129,11 @@ class Users(Base):
     # Класс жетекчи логиндер тизмесин биринчи ачканда түзүлөт.
     parent_code: Mapped[Optional[str]] = mapped_column(String(12), unique=True, nullable=True)
 
-    # Билдирүүлөрдү почтага да жөнөтүү (колдонуучу профилинде өчүрө алат)
+    # Мектептин баннерин колдонуучу өзүнө жылдырган абал: {"url": ..., "x": 0-100, "y": 0-100}.
+    # Сүрөт баарына бирдей, абалы ар бир колдонуучуда өзүнчө.
+    banner_position: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Күнүнө бир жолу почтага окулбаган билдирүүлөрдүн жыйынтыгы (профилде өчүрсө болот)
     email_notifications: Mapped[bool] = mapped_column(
         Boolean,
         default=True,

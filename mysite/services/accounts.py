@@ -6,6 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from mysite.db.models import Users
+from mysite.services.mailer import FRONTEND_URL, send_email
 from mysite.services.passwords import decrypt_temp_password, set_temp_password
 
 
@@ -62,6 +63,20 @@ def create_school_admin(
     db.add(user)
     db.flush()
     return user, password
+
+
+def send_welcome_email(email: str, full_name: str, temporary_password: str) -> None:
+    """Жаңы аккаунтка логин жана убактылуу сыр сөз менен кат (commit'тен кийин чакырылат)."""
+    send_email(
+        email,
+        "Smart School: сиздин аккаунтуңуз",
+        f"Саламатсызбы, {full_name}!\n\n"
+        f"Мектеп сизге Smart School платформасында аккаунт ачты.\n"
+        f"Кирүү: {FRONTEND_URL}/login\n"
+        f"Логин: {email}\n"
+        f"Убактылуу сыр сөз: {temporary_password}\n\n"
+        "Биринчи киргенде сыр сөздү өзүңүздүкүнө алмаштырасыз.",
+    )
 
 
 def change_email(db: Session, user: Users, email: str) -> None:

@@ -87,7 +87,7 @@ docker compose exec api python seed_demo.py
 Платформанын администраторун (бардык мектептердин үстүндө) бир жолу түзүңүз:
 
 ```bash
-docker compose exec api python create_system_admin.py --inn 01234567890123 --name "Асанов Асан"
+docker compose exec api python create_system_admin.py --email admin@gmail.com --name "Асанов Асан"
 ```
 
 Ал убактылуу сыр сөз менен кирип, мектептерди жана алардын директорлорун сайттан кошот
@@ -96,10 +96,24 @@ docker compose exec api python create_system_admin.py --inn 01234567890123 --nam
 Мектепти скрипт менен түз кошсо да болот (директор биринчи киргенде сыр сөзүн алмаштырат):
 
 ```bash
-docker compose exec api python create_admin.py --school "№1 Мектеп" --inn 01234567890124 --name "Асанов Асан" --address "Бишкек"
+docker compose exec api python create_admin.py --school "№1 Мектеп" --email director@gmail.com --name "Асанов Асан"
 ```
 
 Калган баарын (завуч, класстар, мугалимдер, окуучулар Excel менен) директор API/сайт аркылуу кошот.
+
+## 5.1. Почта жана күнүмдүк иштер
+
+Сыр сөздү калыбына келтирүү, жаңы аккаунтка кат жана билдирүүлөрдүн жыйынтыгы почта аркылуу
+жөнөтүлөт. `.env` файлына `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`
+жана `FRONTEND_URL` (сайттын дареги) жазыңыз — мисал `.env.example` ичинде. Gmail үчүн
+«App password» керек. SMTP жок болсо, каттар жөнөтүлбөйт, API логуна гана жазылат.
+
+Күнүмдүк резервдик көчүрмө жана каттардын жыйынтыгы — cron аркылуу (`deploy/crontab.example`):
+
+```bash
+chmod +x deploy/backup.sh
+crontab deploy/crontab.example   # же crontab -e менен кошуңуз
+```
 
 ## 6. Жаңыртуу
 
@@ -139,7 +153,7 @@ docker compose down            # Токтотуу (маалымат volume'да�
 - **HTTPS жок.** Эгер фронтенд HTTPS дарекке (мис. Vercel) жайгаштырылса, браузер `http://` API'ге
   суроону бөгөттөйт (mixed content). Ал учурда API'ге домен + SSL керек — бул кийинки кадам.
   Фронтчу `http://localhost:3000` дарегинен иштеп чыкканда эч кандай көйгөй жок.
-- Сыр сөздү тандап табууга каршы чектөө бар: бир ИННге 15 мүнөттө 10 ийгиликсиз аракет, бир IPге 50
+- Сыр сөздү тандап табууга каршы чектөө бар: бир логинге (почтага) 15 мүнөттө 10 ийгиликсиз аракет, бир IPге 50
   (кирүү жана ата-эненин баланы байлоосу). Маанилерди .env аркылуу өзгөртсө болот: `LOGIN_MAX_FAILURES`,
   `LOGIN_MAX_FAILURES_PER_IP`, `LOGIN_WINDOW_SECONDS`. Эсеп ар бир worker'дин эс тутумунда сакталат.
 - Жүктөлгөн файлдар сервердин дискинде сакталат (бир сервер үчүн жетиштүү).

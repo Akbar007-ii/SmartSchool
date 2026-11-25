@@ -49,6 +49,12 @@ def _send(to: str, subject: str, text: str) -> None:
         logger.exception("Кат жөнөтүлгөн жок: %s", to)
 
 
+def send_email_now(to: str, subject: str, text: str) -> None:
+    """Катты ушул эле агымда жөнөтөт (скрипттер үчүн, мисалы send_daily_digest.py)."""
+    if to and not to.endswith(PLACEHOLDER_DOMAINS):
+        _send(to, subject, text)
+
+
 def send_email(to: str, subject: str, text: str) -> None:
     """Катты фондо жөнөтөт; орун басар почталарды өткөрүп жиберет."""
     if not to or to.endswith(PLACEHOLDER_DOMAINS):
